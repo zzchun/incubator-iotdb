@@ -19,20 +19,25 @@
 package org.apache.iotdb.cluster.utils.hash;
 
 public class VirtualNode {
-  //the index of the virtual node in the physicalNode
-  private final int replicaIndex;
+
+  /**
+   * the index of the virtual node in the physicalNode
+   */
+  private final int index;
+
   private final PhysicalNode physicalNode;
 
-  VirtualNode(int replicaIndex, PhysicalNode physicalNode) {
-    this.replicaIndex = replicaIndex;
+  VirtualNode(int index, PhysicalNode physicalNode) {
+    this.index = index;
     this.physicalNode = physicalNode;
   }
 
-  PhysicalNode getPhysicalNode() {
+  public PhysicalNode getPhysicalNode() {
     return this.physicalNode;
   }
 
-  String getKey() {
-    return String.format("%s-%d", physicalNode.getKey(), replicaIndex);
+  @Override
+  public String toString() {
+    return String.format("%s-%d", physicalNode.getKey(), index);
   }
 }

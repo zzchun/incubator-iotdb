@@ -23,7 +23,7 @@ import com.alipay.sofa.jraft.entity.PeerId;
 import com.alipay.sofa.jraft.rpc.RaftRpcServerFactory;
 import java.util.HashMap;
 import java.util.Map;
-import org.apache.iotdb.cluster.concurrent.pool.QPTaskManager;
+import org.apache.iotdb.cluster.concurrent.pool.QPTaskThreadManager;
 import org.apache.iotdb.cluster.config.ClusterConfig;
 import org.apache.iotdb.cluster.config.ClusterConstant;
 import org.apache.iotdb.cluster.config.ClusterDescriptor;
@@ -31,7 +31,11 @@ import org.apache.iotdb.cluster.entity.data.DataPartitionHolder;
 import org.apache.iotdb.cluster.entity.metadata.MetadataHolder;
 import org.apache.iotdb.cluster.entity.raft.DataPartitionRaftHolder;
 import org.apache.iotdb.cluster.entity.raft.MetadataRaftHolder;
+import org.apache.iotdb.cluster.exception.RaftConnectionException;
+import org.apache.iotdb.cluster.query.manager.coordinatornode.ClusterRpcQueryManager;
+import org.apache.iotdb.cluster.query.manager.querynode.ClusterLocalQueryManager;
 import org.apache.iotdb.cluster.rpc.raft.impl.RaftNodeAsClientManager;
+import org.apache.iotdb.cluster.rpc.raft.processor.QueryMetricAsyncProcessor;
 import org.apache.iotdb.cluster.rpc.raft.processor.nonquery.DataGroupNonQueryAsyncProcessor;
 import org.apache.iotdb.cluster.rpc.raft.processor.nonquery.MetaGroupNonQueryAsyncProcessor;
 import org.apache.iotdb.cluster.rpc.raft.processor.querydata.CloseSeriesReaderSyncProcessor;
@@ -43,11 +47,18 @@ import org.apache.iotdb.cluster.rpc.raft.processor.querymetadata.QueryMetadataIn
 import org.apache.iotdb.cluster.rpc.raft.processor.querymetadata.QueryPathsAsyncProcessor;
 import org.apache.iotdb.cluster.rpc.raft.processor.querymetadata.QuerySeriesTypeAsyncProcessor;
 import org.apache.iotdb.cluster.rpc.raft.processor.querymetadata.QueryTimeSeriesAsyncProcessor;
+import org.apache.iotdb.cluster.rpc.raft.processor.querymetric.QueryJobNumAsyncProcessor;
+import org.apache.iotdb.cluster.rpc.raft.processor.querymetric.QueryLeaderAsyncProcessor;
+import org.apache.iotdb.cluster.rpc.raft.processor.querymetric.QueryStatusAsyncProcessor;
+import org.apache.iotdb.cluster.service.ClusterMonitor;
 import org.apache.iotdb.cluster.utils.RaftUtils;
 import org.apache.iotdb.cluster.utils.hash.PhysicalNode;
 import org.apache.iotdb.cluster.utils.hash.Router;
+import org.apache.iotdb.db.exception.FileNodeManagerException;
 import org.apache.iotdb.db.exception.ProcessorException;
+import org.apache.iotdb.db.exception.StartupException;
 import org.apache.iotdb.db.service.IoTDB;
+import org.apache.iotdb.db.service.RegisterManager;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -83,12 +94,17 @@ public class Server {
    */
   private IoTDB iotdb;
 
-  public static void main(String[] args) {
+  private RegisterManager registerManager = new RegisterManager();
+
+  public static void main(String[] args)
+      throws ProcessorException, RaftConnectionException, FileNodeManagerException {
     Server server = Server.getInstance();
     server.start();
   }
 
-  public void start() {
+  public void start()
+      throws ProcessorException, RaftConnectionException, FileNodeManagerException {
+
     /** Stand-alone version of IoTDB, be careful to replace the internal JDBC Server with a cluster version **/
     iotdb = new IoTDB();
     iotdb.active();
@@ -97,12 +113,15 @@ public class Server {
     /** Init raft groups **/
     PeerId[] peerIds = RaftUtils.convertStringArrayToPeerIdArray(CLUSTER_CONF.getNodes());
     serverId = new PeerId(CLUSTER_CONF.getIp(), CLUSTER_CONF.getPort());
+
+    // Rpc between raft groups
     RpcServer rpcServer = new RpcServer(serverId.getPort());
     RaftRpcServerFactory.addRaftRequestProcessors(rpcServer);
 
     registerNonQueryProcessor(rpcServer);
     registerQueryMetadataProcessor(rpcServer);
     registerQueryDataProcessor(rpcServer);
+    registerQueryMetricProcessor(rpcServer);
 
     metadataHolder = new MetadataRaftHolder(peerIds, serverId, rpcServer, true);
     metadataHolder.init();
@@ -126,6 +145,12 @@ public class Server {
       Router.getInstance().showPhysicalNodes(groupId);
     }
 
+    try {
+      LOGGER.info("Register Cluster Monitor to JMX service.");
+      registerManager.register(ClusterMonitor.INSTANCE);
+    } catch (StartupException e) {
+      stop();
+    }
   }
 
   private void registerNonQueryProcessor(RpcServer rpcServer) {
@@ -148,14 +173,25 @@ public class Server {
     rpcServer.registerUserProcessor(new CloseSeriesReaderSyncProcessor());
   }
 
-  public void stop() throws ProcessorException, InterruptedException {
-    QPTaskManager.getInstance().close(true, ClusterConstant.CLOSE_QP_SUB_TASK_BLOCK_TIMEOUT);
-    iotdb.deactivate();
+  private void registerQueryMetricProcessor(RpcServer rpcServer) {
+    rpcServer.registerUserProcessor(new QueryMetricAsyncProcessor());
+    rpcServer.registerUserProcessor(new QueryJobNumAsyncProcessor());
+    rpcServer.registerUserProcessor(new QueryStatusAsyncProcessor());
+    rpcServer.registerUserProcessor(new QueryLeaderAsyncProcessor());
+  }
+
+  public void stop() throws ProcessorException, RaftConnectionException, FileNodeManagerException {
+    QPTaskThreadManager.getInstance().close(true, ClusterConstant.CLOSE_THREAD_POOL_BLOCK_TIMEOUT);
+    ClusterRpcQueryManager.getInstance().close();
+    ClusterLocalQueryManager.getInstance().close();
     CLIENT_MANAGER.shutdown();
+    iotdb.deactivate();
     metadataHolder.stop();
     for (DataPartitionHolder dataPartitionHolder : dataPartitionHolderMap.values()) {
       dataPartitionHolder.stop();
     }
+
+    registerManager.deregisterAll();
   }
 
   public PeerId getServerId() {

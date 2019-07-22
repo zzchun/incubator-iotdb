@@ -21,7 +21,9 @@ package org.apache.iotdb.cluster.query.manager.querynode;
 import com.alipay.sofa.jraft.util.OnlyForTest;
 import java.io.IOException;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.Map;
+import java.util.Map.Entry;
 import java.util.concurrent.ConcurrentHashMap;
 import org.apache.iotdb.cluster.rpc.raft.request.querydata.InitSeriesReaderRequest;
 import org.apache.iotdb.cluster.rpc.raft.request.querydata.QuerySeriesDataByTimestampRequest;
@@ -53,7 +55,7 @@ public class ClusterLocalQueryManager implements IClusterLocalQueryManager {
 
   @Override
   public InitSeriesReaderResponse createQueryDataSet(InitSeriesReaderRequest request)
-      throws IOException, FileNodeManagerException, PathErrorException, ProcessorException, QueryFilterOptimizationException {
+      throws IOException, FileNodeManagerException, PathErrorException, ProcessorException, QueryFilterOptimizationException, ClassNotFoundException {
     long jobId = QueryResourceManager.getInstance().assignJobId();
     String taskId = request.getTaskId();
     TASK_ID_MAP_JOB_ID.put(taskId, jobId);
@@ -111,6 +113,16 @@ public class ClusterLocalQueryManager implements IClusterLocalQueryManager {
       readerUsageMap.put(groupId, readerUsageMap.getOrDefault(groupId, 0) + 1);
     });
     return readerUsageMap;
+  }
+
+  @Override
+  public void close() throws FileNodeManagerException {
+    Iterator<Entry<Long, ClusterLocalSingleQueryManager>> iterator = SINGLE_QUERY_MANAGER_MAP.entrySet().iterator();
+    while(iterator.hasNext()){
+      Entry<Long, ClusterLocalSingleQueryManager> entry = iterator.next();
+      entry.getValue().close();
+      iterator.remove();
+    }
   }
 
   @OnlyForTest

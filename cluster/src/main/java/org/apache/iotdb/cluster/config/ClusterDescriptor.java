@@ -56,8 +56,11 @@ public class ClusterDescriptor {
    * test. In most case, you should invoke this method.
    */
   public void loadProps() {
+    // modify iotdb config
     ioTDBConf.setRpcImplClassName(TSServiceClusterImpl.class.getName());
     ioTDBConf.setEnableWal(false);
+
+    // cluster config
     conf.setDefaultPath();
     InputStream inputStream;
     String url = System.getProperty(IoTDBConstant.IOTDB_CONF, null);
@@ -89,8 +92,12 @@ public class ClusterDescriptor {
     Properties properties = new Properties();
     try {
       properties.load(inputStream);
-      conf.setNodes(properties.getProperty("nodes", ClusterConfig.DEFAULT_NODE)
-          .split(","));
+      String[] nodes = properties.getProperty("nodes", ClusterConfig.DEFAULT_NODE)
+          .split(",");
+      for(int i = 0 ; i < nodes.length ; i++){
+        nodes[i] = nodes[i].trim();
+      }
+      conf.setNodes(nodes);
 
       conf.setReplication(Integer
           .parseInt(properties.getProperty("replication",
@@ -137,21 +144,27 @@ public class ClusterDescriptor {
           .parseInt(properties.getProperty("num_of_virtual_nodes",
               Integer.toString(conf.getNumOfVirtualNodes()))));
 
-      conf.setMaxNumOfInnerRpcClient(Integer
-          .parseInt(properties.getProperty("max_num_of_inner_rpc_client",
-              Integer.toString(conf.getMaxNumOfInnerRpcClient()))));
+      conf.setConcurrentInnerRpcClientThread(Integer
+          .parseInt(properties.getProperty("concurrent_inner_rpc_client_thread",
+              Integer.toString(conf.getConcurrentInnerRpcClientThread()))));
 
-      conf.setMaxQueueNumOfInnerRpcClient(Integer
+      conf.setMaxQueueNumOfQPTask(Integer
           .parseInt(properties.getProperty("max_queue_num_of_inner_rpc_client",
-              Integer.toString(conf.getMaxQueueNumOfInnerRpcClient()))));
+              Integer.toString(conf.getMaxQueueNumOfQPTask()))));
 
-      conf.setReadMetadataConsistencyLevel(Integer
-          .parseInt(properties.getProperty("read_metadata_consistency_level",
-              Integer.toString(conf.getReadMetadataConsistencyLevel()))));
+      String readMetadataLevelName = properties.getProperty("read_metadata_consistency_level", "");
+      int readMetadataLevel = ClusterConsistencyLevel.getLevel(readMetadataLevelName);
+      if(readMetadataLevel == ClusterConsistencyLevel.UNSUPPORT_LEVEL){
+        readMetadataLevel = ClusterConsistencyLevel.STRONG.ordinal();
+      }
+      conf.setReadMetadataConsistencyLevel(readMetadataLevel);
 
-      conf.setReadDataConsistencyLevel(Integer
-          .parseInt(properties.getProperty("read_data_consistency_level",
-              Integer.toString(conf.getReadDataConsistencyLevel()))));
+      String readDataLevelName = properties.getProperty("read_data_consistency_level", "");
+      int readDataLevel = ClusterConsistencyLevel.getLevel(readDataLevelName);
+      if(readDataLevel == ClusterConsistencyLevel.UNSUPPORT_LEVEL){
+        readDataLevel = ClusterConsistencyLevel.STRONG.ordinal();
+      }
+      conf.setReadDataConsistencyLevel(readDataLevel);
 
       conf.setConcurrentQPSubTaskThread(Integer
           .parseInt(properties.getProperty("concurrent_qp_sub_task_thread",
@@ -166,6 +179,10 @@ public class ClusterDescriptor {
 
       if (conf.getConcurrentQPSubTaskThread() <= 0) {
         conf.setConcurrentQPSubTaskThread(Runtime.getRuntime().availableProcessors() * 10);
+      }
+
+      if (conf.getConcurrentInnerRpcClientThread() <= 0) {
+        conf.setConcurrentInnerRpcClientThread(Runtime.getRuntime().availableProcessors() * 10);
       }
 
       if (conf.getMaxCachedBatchDataListSize() <= 0) {

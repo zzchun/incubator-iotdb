@@ -40,21 +40,23 @@ import org.apache.iotdb.tsfile.utils.Pair;
 
 public class GroupByWithValueFilterDataSet extends GroupByEngineDataSet {
 
-  private List<EngineReaderByTimeStamp> allDataReaderList;
-  private TimeGenerator timestampGenerator;
+  protected List<EngineReaderByTimeStamp> allDataReaderList;
+  protected TimeGenerator timestampGenerator;
+
   /**
    * cached timestamp for next group by partition.
    */
-  private long timestamp;
+  protected long timestamp;
+
   /**
    * if this object has cached timestamp for next group by partition.
    */
-  private boolean hasCachedTimestamp;
+  protected boolean hasCachedTimestamp;
 
   /**
    * group by batch calculation size.
    */
-  private int timeStampFetchSize;
+  protected int timestampFetchSize;
 
   /**
    * constructor.
@@ -63,7 +65,7 @@ public class GroupByWithValueFilterDataSet extends GroupByEngineDataSet {
       List<Pair<Long, Long>> mergedIntervals) {
     super(jobId, paths, unit, origin, mergedIntervals);
     this.allDataReaderList = new ArrayList<>();
-    this.timeStampFetchSize = 10 * IoTDBDescriptor.getInstance().getConfig().getFetchSize();
+    this.timestampFetchSize = 10 * IoTDBDescriptor.getInstance().getConfig().getFetchSize();
   }
 
   /**
@@ -92,7 +94,7 @@ public class GroupByWithValueFilterDataSet extends GroupByEngineDataSet {
       function.init();
     }
 
-    long[] timestampArray = new long[timeStampFetchSize];
+    long[] timestampArray = new long[timestampFetchSize];
     int timeArrayLength = 0;
     if (hasCachedTimestamp) {
       if (timestamp < endTime) {
@@ -140,7 +142,7 @@ public class GroupByWithValueFilterDataSet extends GroupByEngineDataSet {
    */
   private int constructTimeArrayForOneCal(long[] timestampArray, int timeArrayLength)
       throws IOException {
-    for (int cnt = 1; cnt < timeStampFetchSize && timestampGenerator.hasNext(); cnt++) {
+    for (int cnt = 1; cnt < timestampFetchSize && timestampGenerator.hasNext(); cnt++) {
       timestamp = timestampGenerator.next();
       if (timestamp < endTime) {
         timestampArray[timeArrayLength++] = timestamp;
@@ -152,7 +154,7 @@ public class GroupByWithValueFilterDataSet extends GroupByEngineDataSet {
     return timeArrayLength;
   }
 
-  private RowRecord constructRowRecord() {
+  protected RowRecord constructRowRecord() {
     RowRecord record = new RowRecord(startTime);
     functions.forEach(function -> record.addField(getField(function.getResult())));
     return record;

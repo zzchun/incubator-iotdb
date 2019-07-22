@@ -27,6 +27,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
+import org.apache.iotdb.cluster.config.ClusterConsistencyLevel;
 import org.apache.iotdb.cluster.config.ClusterConstant;
 import org.apache.iotdb.cluster.exception.ConsistencyLevelException;
 import org.apache.iotdb.cluster.qp.executor.ClusterQueryProcessExecutor;
@@ -66,9 +67,10 @@ public class TSServiceClusterImpl extends TSServiceImpl {
 
   private static final Logger LOGGER = LoggerFactory.getLogger(TSServiceClusterImpl.class);
 
-  private ClusterQueryProcessExecutor queryDataExecutor = new ClusterQueryProcessExecutor();
-  private NonQueryExecutor nonQueryExecutor = new NonQueryExecutor();
   private QueryMetadataExecutor queryMetadataExecutor = new QueryMetadataExecutor();
+  private ClusterQueryProcessExecutor queryDataExecutor = new ClusterQueryProcessExecutor(
+      queryMetadataExecutor);
+  private NonQueryExecutor nonQueryExecutor = new NonQueryExecutor();
 
   private IClusterRpcQueryManager queryManager = ClusterRpcQueryManager.getInstance();
 
@@ -102,7 +104,8 @@ public class TSServiceClusterImpl extends TSServiceImpl {
   }
 
   @Override
-  protected TSDataType getSeriesType(String path) throws PathErrorException, InterruptedException, ProcessorException {
+  protected TSDataType getSeriesType(String path)
+      throws PathErrorException, InterruptedException, ProcessorException {
     return queryMetadataExecutor.processSeriesTypeQuery(path);
   }
 
@@ -123,17 +126,17 @@ public class TSServiceClusterImpl extends TSServiceImpl {
       List<String> statements = req.getStatements();
       PhysicalPlan[] physicalPlans = new PhysicalPlan[statements.size()];
       int[] result = new int[statements.size()];
-      String batchErrorMessage = "";
+      StringBuilder batchErrorMessage = new StringBuilder();
       boolean isAllSuccessful = true;
 
-      /** find all valid physical plans **/
+      /* find all valid physical plans */
       for (int i = 0; i < statements.size(); i++) {
         try {
           PhysicalPlan plan = processor
               .parseSQLToPhysicalPlan(statements.get(i), zoneIds.get());
           plan.setProposer(username.get());
 
-          /** if meet a query, handle all requests before the query request. **/
+          /* if meet a query, handle all requests before the query request. */
           if (plan.isQuery()) {
             int[] resultTemp = new int[i];
             PhysicalPlan[] physicalPlansTemp = new PhysicalPlan[i];
@@ -143,8 +146,11 @@ public class TSServiceClusterImpl extends TSServiceImpl {
             physicalPlans = physicalPlansTemp;
             BatchResult batchResult = new BatchResult(isAllSuccessful, batchErrorMessage, result);
             nonQueryExecutor.processBatch(physicalPlans, batchResult);
+            batchErrorMessage.append(String
+                .format(ERROR_MESSAGE_FORMAT_IN_BATCH, i,
+                    "statement is query :" + statements.get(i)));
             return getTSBathExecuteStatementResp(TS_StatusCode.ERROR_STATUS,
-                "statement is query :" + statements.get(i), Arrays.stream(result).boxed().collect(
+                statements.get(i), Arrays.stream(result).boxed().collect(
                     Collectors.toList()));
           }
 
@@ -155,7 +161,7 @@ public class TSServiceClusterImpl extends TSServiceImpl {
                 plan.getOperatorType());
             result[i] = Statement.EXECUTE_FAILED;
             isAllSuccessful = false;
-            batchErrorMessage = errMessage;
+            batchErrorMessage.append(String.format(ERROR_MESSAGE_FORMAT_IN_BATCH, i, errMessage));
           } else {
             physicalPlans[i] = plan;
           }
@@ -165,19 +171,19 @@ public class TSServiceClusterImpl extends TSServiceImpl {
               e.getMessage());
           result[i] = Statement.EXECUTE_FAILED;
           isAllSuccessful = false;
-          batchErrorMessage = errMessage;
+          batchErrorMessage.append(String.format(ERROR_MESSAGE_FORMAT_IN_BATCH, i, errMessage));
         } catch (Exception e) {
           String errMessage = String.format("Fail to generate physcial plan" + "%s beacuse %s",
               statements.get(i), e.getMessage());
           result[i] = Statement.EXECUTE_FAILED;
           isAllSuccessful = false;
-          batchErrorMessage = errMessage;
+          batchErrorMessage.append(String.format(ERROR_MESSAGE_FORMAT_IN_BATCH, i, errMessage));
         }
       }
 
       BatchResult batchResult = new BatchResult(isAllSuccessful, batchErrorMessage, result);
       nonQueryExecutor.processBatch(physicalPlans, batchResult);
-      batchErrorMessage = batchResult.batchErrorMessage;
+      batchErrorMessage.append(batchResult.batchErrorMessage);
       isAllSuccessful = batchResult.isAllSuccessful;
 
       if (isAllSuccessful) {
@@ -185,7 +191,8 @@ public class TSServiceClusterImpl extends TSServiceImpl {
             "Execute batch statements successfully", Arrays.stream(result).boxed().collect(
                 Collectors.toList()));
       } else {
-        return getTSBathExecuteStatementResp(TS_StatusCode.ERROR_STATUS, batchErrorMessage,
+        return getTSBathExecuteStatementResp(TS_StatusCode.ERROR_STATUS,
+            batchErrorMessage.toString(),
             Arrays.stream(result).boxed().collect(
                 Collectors.toList()));
       }
@@ -198,16 +205,17 @@ public class TSServiceClusterImpl extends TSServiceImpl {
   /**
    * Present batch results.
    */
-  public class BatchResult {
+  public static class BatchResult {
 
     private boolean isAllSuccessful;
-    private String batchErrorMessage;
-    private int[] result;
+    private StringBuilder batchErrorMessage;
+    private int[] resultArray;
 
-    private BatchResult(boolean isAllSuccessful, String batchErrorMessage, int[] result) {
+    public BatchResult(boolean isAllSuccessful, StringBuilder batchErrorMessage,
+        int[] resultArray) {
       this.isAllSuccessful = isAllSuccessful;
       this.batchErrorMessage = batchErrorMessage;
-      this.result = result;
+      this.resultArray = resultArray;
     }
 
     public boolean isAllSuccessful() {
@@ -218,20 +226,21 @@ public class TSServiceClusterImpl extends TSServiceImpl {
       isAllSuccessful = allSuccessful;
     }
 
-    public String getBatchErrorMessage() {
+    public StringBuilder getBatchErrorMessage() {
       return batchErrorMessage;
     }
 
-    public void setBatchErrorMessage(String batchErrorMessage) {
-      this.batchErrorMessage = batchErrorMessage;
+    public void addBatchErrorMessage(int index, String batchErrorMessage) {
+      this.batchErrorMessage
+          .append(String.format(ERROR_MESSAGE_FORMAT_IN_BATCH, index, batchErrorMessage));
     }
 
-    public int[] getResult() {
-      return result;
+    public int[] getResultArray() {
+      return resultArray;
     }
 
-    public void setResult(int[] result) {
-      this.result = result;
+    public void setResultArray(int[] resultArray) {
+      this.resultArray = resultArray;
     }
   }
 
@@ -243,22 +252,30 @@ public class TSServiceClusterImpl extends TSServiceImpl {
     statement = statement.toLowerCase().trim();
     try {
       if (Pattern.matches(ClusterConstant.SET_READ_METADATA_CONSISTENCY_LEVEL_PATTERN, statement)) {
-        String[] splits = statement.split("\\s+");
-        int level = Integer.parseInt(splits[splits.length - 1]);
+        int level = parseConsistencyLevel(statement);
         queryMetadataExecutor.setReadMetadataConsistencyLevel(level);
         return true;
       } else if (Pattern
           .matches(ClusterConstant.SET_READ_DATA_CONSISTENCY_LEVEL_PATTERN, statement)) {
-        String[] splits = statement.split("\\s+");
-        int level = Integer.parseInt(splits[splits.length - 1]);
+        int level = parseConsistencyLevel(statement);
         queryDataExecutor.setReadDataConsistencyLevel(level);
         return true;
       } else {
         return false;
       }
-    } catch (ConsistencyLevelException e){
+    } catch (ConsistencyLevelException e) {
       throw new Exception(e.getMessage());
     }
+  }
+
+  private int parseConsistencyLevel(String statement) throws ConsistencyLevelException {
+    String[] splits = statement.split("\\s+");
+    String levelName = splits[splits.length - 1].toLowerCase();
+    int level = ClusterConsistencyLevel.getLevel(levelName);
+    if (level == ClusterConsistencyLevel.UNSUPPORT_LEVEL) {
+      throw new ConsistencyLevelException(String.format("Consistency level %s not support", levelName));
+    }
+    return level;
   }
 
   @Override
@@ -266,15 +283,13 @@ public class TSServiceClusterImpl extends TSServiceImpl {
     return nonQueryExecutor.processNonQuery(plan);
   }
 
-  /**
-   * It's unnecessary to do this check. It has benn checked in transforming query physical plan.
-   */
   @Override
-  public void checkFileLevelSet(List<Path> paths) throws PathErrorException {
+  protected void checkFileLevelSet(List<Path> paths) throws PathErrorException {
+    //It's unnecessary to do this check. It has benn checked in transforming query physical plan.
   }
 
   @Override
-  public void releaseQueryResource(TSCloseOperationReq req) throws Exception {
+  protected void releaseQueryResource(TSCloseOperationReq req) throws Exception {
     Map<Long, QueryContext> contextMap = contextMapLocal.get();
     if (contextMap == null) {
       return;
@@ -294,7 +309,7 @@ public class TSServiceClusterImpl extends TSServiceImpl {
   }
 
   @Override
-  public QueryDataSet createNewDataSet(String statement, int fetchSize, TSFetchResultsReq req)
+  protected QueryDataSet createNewDataSet(String statement, int fetchSize, TSFetchResultsReq req)
       throws PathErrorException, QueryFilterOptimizationException, FileNodeManagerException,
       ProcessorException, IOException {
     PhysicalPlan physicalPlan = queryStatus.get().get(statement);
@@ -306,15 +321,26 @@ public class TSServiceClusterImpl extends TSServiceImpl {
     contextMapLocal.get().put(req.queryId, context);
 
     queryManager.addSingleQuery(jobId, (QueryPlan) physicalPlan);
-    QueryDataSet queryDataSet = processor.getExecutor().processQuery((QueryPlan) physicalPlan,
+    QueryDataSet queryDataSet = processor.getExecutor().processQuery(physicalPlan,
         context);
-    queryRet.get().put(statement, queryDataSet);
+    try {
+      queryRet.get().put(statement, queryDataSet);
+    }catch (Exception e){
+      e.printStackTrace();
+    }
     return queryDataSet;
   }
+
+  @Override
+  public void handleClientExit() throws TException {
+    closeClusterService();
+    closeOperation(null);
+    closeSession(null);
+  }
+
   /**
    * Close cluster service
    */
-  @Override
   public void closeClusterService() {
     nonQueryExecutor.shutdown();
     queryMetadataExecutor.shutdown();

@@ -25,9 +25,7 @@ import org.apache.iotdb.db.exception.FileNodeManagerException;
 import org.apache.iotdb.db.exception.PathErrorException;
 import org.apache.iotdb.db.exception.ProcessorException;
 import org.apache.iotdb.db.qp.physical.PhysicalPlan;
-import org.apache.iotdb.db.qp.physical.crud.QueryPlan;
 import org.apache.iotdb.db.query.context.QueryContext;
-import org.apache.iotdb.db.query.executor.IEngineQueryRouter;
 import org.apache.iotdb.db.query.fill.IFill;
 import org.apache.iotdb.tsfile.exception.filter.QueryFilterOptimizationException;
 import org.apache.iotdb.tsfile.file.metadata.enums.TSDataType;
@@ -38,6 +36,12 @@ import org.apache.iotdb.tsfile.utils.Pair;
 
 public interface IQueryProcessExecutor {
 
+  /**
+   * Process Non-Query Physical plan, including insert/update/delete operation of
+   * data/metadata/Privilege
+   *
+   * @param plan Physical Non-Query Plan
+   */
   boolean processNonQuery(PhysicalPlan plan) throws ProcessorException;
 
   /**
@@ -46,13 +50,12 @@ public interface IQueryProcessExecutor {
    * @param queryPlan QueryPlan
    * @return QueryDataSet
    */
-  QueryDataSet processQuery(QueryPlan queryPlan, QueryContext context)
+  QueryDataSet processQuery(PhysicalPlan queryPlan, QueryContext context)
       throws IOException, FileNodeManagerException, PathErrorException,
       QueryFilterOptimizationException, ProcessorException;
 
   /**
    * process aggregate plan of qp layer, construct queryDataSet.
-   *
    */
   QueryDataSet aggregate(List<Path> paths, List<String> aggres, IExpression expression,
       QueryContext context)
@@ -121,8 +124,8 @@ public interface IQueryProcessExecutor {
    * @param insertValues values to be inserted
    * @return - Operate Type.
    */
-  int multiInsert(String deviceId, long insertTime, List<String> measurementList,
-      List<String> insertValues) throws ProcessorException;
+  int multiInsert(String deviceId, long insertTime, String[] measurementList,
+      String[] insertValues) throws ProcessorException;
 
   boolean judgePathExists(Path fullPath);
 

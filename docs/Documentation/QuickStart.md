@@ -89,6 +89,16 @@ incubator-iotdb/     <-- root path
 
 Let $IOTDB_HOME = /workspace/incubator-iotdb/iotdb/iotdb/
 Let $IOTDB_CLI_HOME = /workspace/incubator-iotdb/iotdb-cli/cli/
+
+Note:
+* if `IOTDB_HOME` is not explicitly assigned, 
+then by default `IOTDB_HOME` is the direct parent directory of `bin/start-server.sh` on Unix/OS X 
+(or that of `bin\start-server.bat` on Windows).
+
+* if `IOTDB_CLI_HOME` is not explicitly assigned, 
+then by default `IOTDB_CLI_HOME` is the direct parent directory of `bin/start-client.sh` on 
+Unix/OS X (or that of `bin\start-client.bat` on Windows).
+
 If you are not the first time that building IoTDB, remember deleting the following files:
 
 ```
@@ -217,20 +227,22 @@ Till now, we have already create a table called root.vehicle and add a colomn ca
 IoTDB> SHOW TIMESERIES
 ===  Timeseries Tree  ===
 
-root:{
-    ln:{
-        wf01:{
-            wt01:{
-                status:{
-                     DataType: BOOLEAN,
-                     Encoding: PLAIN,
-                     Compressor: UNCOMPRESSED,
-                     args: {},
-                     StorageGroup: root.vehicle
-                }
-            }
-        }
-    }
+{
+	"root":{
+		"ln":{
+			"wf01":{
+				"wt01":{
+					"status":{
+						"args":"{}",
+						"StorageGroup":"root.ln",
+						"DataType":"BOOLEAN",
+						"Compressor":"UNCOMPRESSED",
+						"Encoding":"PLAIN"
+					}
+				}
+			}
+		}
+	}
 }
 ```
 
@@ -241,27 +253,29 @@ IoTDB> CREATE TIMESERIES root.ln.wf01.wt01.temperature WITH DATATYPE=FLOAT, ENCO
 IoTDB> SHOW TIMESERIES
 ===  Timeseries Tree  ===
 
-root:{
-    ln:{
-        wf01:{
-            wt01:{
-                status:{
-                     DataType: BOOLEAN,
-                     Encoding: PLAIN,
-                     Compressor: UNCOMPRESSED,
-                     args: {},
-                     StorageGroup: root.vehicle
-                },
-                temperature:{
-                     DataType: FLOAT,
-                     Encoding: RLE,
-                     Compressor: UNCOMPRESSED,
-                     args: {},
-                     StorageGroup: root.vehicle
-                }
-            }
-        }
-    }
+{
+	"root":{
+		"ln":{
+			"wf01":{
+				"wt01":{
+					"temperature":{
+						"args":"{}",
+						"StorageGroup":"root.ln",
+						"DataType":"FLOAT",
+						"Compressor":"UNCOMPRESSED",
+						"Encoding":"RLE"
+					},
+					"status":{
+						"args":"{}",
+						"StorageGroup":"root.ln",
+						"DataType":"BOOLEAN",
+						"Compressor":"UNCOMPRESSED",
+						"Encoding":"PLAIN"
+					}
+				}
+			}
+		}
+	}
 }
 ```
 Now, for your conveniect, SHOW TIMESERIES clause also supports extention syntax, the pattern is (for further details, check Chapter x):

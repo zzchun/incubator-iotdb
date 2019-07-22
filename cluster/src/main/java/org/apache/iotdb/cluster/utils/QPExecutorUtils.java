@@ -45,9 +45,12 @@ public class QPExecutorUtils {
   private static final PhysicalNode localNode = new PhysicalNode(CLUSTER_CONFIG.getIp(),
       CLUSTER_CONFIG.getPort());
 
-  private static final  MManager mManager = MManager.getInstance();
+  private static final MManager mManager = MManager.getInstance();
 
   private static final Server server = Server.getInstance();
+
+  private QPExecutorUtils() {
+  }
 
   /**
    * Get Storage Group Name by device name
@@ -85,13 +88,8 @@ public class QPExecutorUtils {
     for (int i = 0; i < sgList.size(); i++) {
       String sg = sgList.get(i);
       String groupId = router.getGroupIdBySG(sg);
-      if (map.containsKey(groupId)) {
-        map.get(groupId).add(sg);
-      } else {
-        Set<String> set = new HashSet<>();
-        set.add(sg);
-        map.put(groupId, set);
-      }
+      map.putIfAbsent(groupId, new HashSet<>());
+      map.get(groupId).add(sg);
     }
     return map;
   }
@@ -102,9 +100,9 @@ public class QPExecutorUtils {
    */
   public static boolean canHandleNonQueryByGroupId(String groupId) {
     boolean canHandle = false;
-    if(groupId.equals(ClusterConfig.METADATA_GROUP_ID)){
+    if (groupId.equals(ClusterConfig.METADATA_GROUP_ID)) {
       canHandle = ((MetadataRaftHolder) (server.getMetadataHolder())).getFsm().isLeader();
-    }else {
+    } else {
       if (checkDataGroupLeader(groupId)) {
         canHandle = true;
       }
@@ -121,7 +119,7 @@ public class QPExecutorUtils {
   public static boolean checkDataGroupLeader(String groupId) {
     boolean isLeader = false;
     if (router.containPhysicalNodeByGroupId(groupId, localNode) && RaftUtils
-        .getPhysicalNodeFrom(RaftUtils.getLeaderPeerID(groupId)).equals(localNode)) {
+        .getPhysicalNodeFrom(RaftUtils.getLocalLeaderPeerID(groupId)).equals(localNode)) {
       isLeader = true;
     }
     return isLeader;
@@ -141,8 +139,7 @@ public class QPExecutorUtils {
    */
   public static String getGroupIdByDevice(String device) throws PathErrorException {
     String storageGroup = QPExecutorUtils.getStroageGroupByDevice(device);
-    String groupId = Router.getInstance().getGroupIdBySG(storageGroup);
-    return groupId;
+    return Router.getInstance().getGroupIdBySG(storageGroup);
   }
 
   /**

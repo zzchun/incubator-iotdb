@@ -21,6 +21,11 @@ package org.apache.iotdb.cluster.concurrent;
 public enum ThreadName {
 
   /**
+   * Node as client thread
+   */
+  NODE_AS_CLIENT("Node-As-Client-Thread"),
+
+  /**
    * QP Task thread
    */
   QP_TASK("QP-Task-Thread"),

@@ -34,18 +34,17 @@ public class RouterTest {
   private String[] ipListOld;
   private int replicatorOld;
   private int numOfVirtualNodesOld;
-//  private HashFunction function = new MD5Hash();
   private final int PORT = 7777;
 
   @Before
-  public void setUp() throws Exception {
+  public void setUp() {
     ipListOld = config.getNodes();
     replicatorOld = config.getReplication();
     numOfVirtualNodesOld = config.getNumOfVirtualNodes();
   }
 
   @After
-  public void tearDown() throws Exception {
+  public void tearDown() {
     config.setNodes(ipListOld);
     config.setReplication(replicatorOld);
     config.setNumOfVirtualNodes(numOfVirtualNodesOld);
@@ -64,10 +63,9 @@ public class RouterTest {
     config.setNumOfVirtualNodes(numOfVirtulaNodes);
     Router router = Router.getInstance();
     router.init();
-//    router.showPhysicalRing();
-//    router.showVirtualRing();
+    router.showPhysicalRing();
+    router.showVirtualRing();
     String sg1 = "root.device.sensor";
-//    System.out.println(function.hash(sg1));
     assertTrue(router.routeNode(sg1).equals(new PhysicalNode("192.168.130.4", PORT)));
     PhysicalNode[] expected1 = {
         new PhysicalNode("192.168.130.4", PORT),
@@ -80,7 +78,6 @@ public class RouterTest {
     assertEquals(Router.DATA_GROUP_STR + "0", router.getGroupID(router.routeGroup(sg1)));
 
     String sg2 = "root.device.sensor2";
-//    System.out.println(function.hash(sg2));
     assertTrue(router.routeNode(sg2).equals(new PhysicalNode("192.168.130.3", PORT)));
     PhysicalNode[] expected2 = {
         new PhysicalNode("192.168.130.3", PORT),
@@ -105,11 +102,10 @@ public class RouterTest {
 
     Router router = Router.getInstance();
     router.init();
-//    router.showPhysicalRing();
-//    router.showVirtualRing();
+    router.showPhysicalRing();
+    router.showVirtualRing();
     String sg1 = "root.device.sensor";
-//    System.out.println(function.hash(sg1));
-    assertTrue(router.routeNode(sg1).equals(new PhysicalNode("192.168.130.3", PORT)));
+    assertEquals(router.routeNode(sg1), new PhysicalNode("192.168.130.3", PORT));
     PhysicalNode[] expected1 = {
         new PhysicalNode("192.168.130.3", PORT),
         new PhysicalNode("192.168.130.2", PORT),
@@ -118,11 +114,10 @@ public class RouterTest {
     assertPhysicalNodeEquals(expected1, router.routeGroup(sg1));
     // test cache
     assertPhysicalNodeEquals(expected1, router.routeGroup(sg1));
-    assertEquals(Router.DATA_GROUP_STR + "0", router.getGroupID(router.routeGroup(sg1)));
+    assertEquals(Router.DATA_GROUP_STR + "2", router.getGroupID(router.routeGroup(sg1)));
 
     String sg2 = "root.vehicle.d1";
-//    System.out.println(function.hash(sg2));
-    assertTrue(router.routeNode(sg2).equals(new PhysicalNode("192.168.130.2", PORT)));
+    assertEquals(router.routeNode(sg2), new PhysicalNode("192.168.130.2", PORT));
     PhysicalNode[] expected2 = {
         new PhysicalNode("192.168.130.2", PORT),
         new PhysicalNode("192.168.130.1", PORT),
@@ -149,7 +144,7 @@ public class RouterTest {
 
     Router router = Router.getInstance();
     router.init();
-//    router.showPhysicalRing();
+    router.showPhysicalRing();
     String[][][] ipIndex = {
         {
             {"192.168.130.1", "192.168.130.3", "192.168.130.4",},
@@ -195,7 +190,7 @@ public class RouterTest {
 
     Router router = Router.getInstance();
     router.init();
-//    router.showPhysicalRing();
+    router.showPhysicalRing();
     String[][][] ipIndex = {
         {
             {"192.168.130.1", "192.168.130.3", "192.168.130.2",},

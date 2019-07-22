@@ -20,16 +20,20 @@ package org.apache.iotdb.cluster.rpc.raft.processor.querydata;
 
 import com.alipay.remoting.BizContext;
 import com.alipay.sofa.jraft.Status;
+import org.apache.iotdb.cluster.config.ClusterConsistencyLevel;
 import org.apache.iotdb.cluster.config.ClusterConstant;
 import org.apache.iotdb.cluster.query.manager.querynode.ClusterLocalQueryManager;
 import org.apache.iotdb.cluster.rpc.raft.processor.BasicSyncUserProcessor;
 import org.apache.iotdb.cluster.rpc.raft.request.querydata.InitSeriesReaderRequest;
-import org.apache.iotdb.cluster.rpc.raft.response.querydata.InitSeriesReaderResponse;
 import org.apache.iotdb.cluster.utils.QPExecutorUtils;
 import org.apache.iotdb.cluster.utils.RaftUtils;
 import org.apache.iotdb.db.exception.ProcessorException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class InitSeriesReaderSyncProcessor extends BasicSyncUserProcessor<InitSeriesReaderRequest> {
+
+  private static final Logger LOGGER = LoggerFactory.getLogger(InitSeriesReaderSyncProcessor.class);
 
   @Override
   public Object handleRequest(BizContext bizContext, InitSeriesReaderRequest request)
@@ -47,7 +51,8 @@ public class InitSeriesReaderSyncProcessor extends BasicSyncUserProcessor<InitSe
    * @param groupId group id
    */
   private void handleNullRead(int readConsistencyLevel, String groupId) throws ProcessorException {
-    if (readConsistencyLevel == ClusterConstant.STRONG_CONSISTENCY_LEVEL && !QPExecutorUtils
+    LOGGER.debug("Read data level is {}", readConsistencyLevel);
+    if (readConsistencyLevel == ClusterConsistencyLevel.STRONG.ordinal() && !QPExecutorUtils
         .checkDataGroupLeader(groupId)) {
       Status nullReadTaskStatus = Status.OK();
       RaftUtils.handleNullReadToDataGroup(nullReadTaskStatus, groupId);

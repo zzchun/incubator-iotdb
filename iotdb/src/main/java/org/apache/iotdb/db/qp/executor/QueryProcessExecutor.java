@@ -32,9 +32,10 @@ import org.apache.iotdb.db.qp.physical.crud.AggregationPlan;
 import org.apache.iotdb.db.qp.physical.crud.FillQueryPlan;
 import org.apache.iotdb.db.qp.physical.crud.GroupByPlan;
 import org.apache.iotdb.db.qp.physical.crud.QueryPlan;
+import org.apache.iotdb.db.qp.physical.sys.AuthorPlan;
 import org.apache.iotdb.db.query.context.QueryContext;
+import org.apache.iotdb.db.query.executor.AbstractQueryRouter;
 import org.apache.iotdb.db.query.executor.EngineQueryRouter;
-import org.apache.iotdb.db.query.executor.IEngineQueryRouter;
 import org.apache.iotdb.tsfile.exception.filter.QueryFilterOptimizationException;
 import org.apache.iotdb.tsfile.read.common.Path;
 import org.apache.iotdb.tsfile.read.expression.QueryExpression;
@@ -43,13 +44,27 @@ import org.apache.iotdb.tsfile.read.query.dataset.QueryDataSet;
 public abstract class QueryProcessExecutor implements IQueryProcessExecutor {
 
   protected ThreadLocal<Integer> fetchSize = new ThreadLocal<>();
-  protected IEngineQueryRouter queryRouter = new EngineQueryRouter();
+  protected AbstractQueryRouter queryRouter = new EngineQueryRouter();
 
   @Override
-  public QueryDataSet processQuery(QueryPlan queryPlan, QueryContext context)
+  public QueryDataSet processQuery(PhysicalPlan queryPlan, QueryContext context)
       throws IOException, FileNodeManagerException, PathErrorException,
       QueryFilterOptimizationException, ProcessorException {
 
+    if (queryPlan instanceof QueryPlan) {
+      return processDataQuery((QueryPlan) queryPlan, context);
+    } else if (queryPlan instanceof AuthorPlan) {
+      return processAuthorQuery((AuthorPlan) queryPlan, context);
+    } else {
+      throw new ProcessorException(String.format("Unrecognized query plan %s", queryPlan));
+    }
+  }
+
+  protected abstract QueryDataSet processAuthorQuery(AuthorPlan plan, QueryContext context)
+      throws ProcessorException;
+
+  private QueryDataSet processDataQuery(QueryPlan queryPlan, QueryContext context)
+      throws FileNodeManagerException, QueryFilterOptimizationException, PathErrorException, ProcessorException, IOException {
     QueryExpression queryExpression = QueryExpression.create().setSelectSeries(queryPlan.getPaths())
         .setExpression(queryPlan.getExpression());
     if (queryPlan instanceof GroupByPlan) {
@@ -110,7 +125,8 @@ public abstract class QueryProcessExecutor implements IQueryProcessExecutor {
       }
       return result;
     } catch (PathErrorException e) {
-      throw new ProcessorException(e.getMessage());
+      throw new ProcessorException(e);
     }
   }
+
 }

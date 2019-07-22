@@ -20,7 +20,9 @@ package org.apache.iotdb.cluster.query.manager.coordinatornode;
 
 import com.alipay.sofa.jraft.util.OnlyForTest;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.Map;
+import java.util.Map.Entry;
 import java.util.concurrent.ConcurrentHashMap;
 import org.apache.iotdb.cluster.config.ClusterConfig;
 import org.apache.iotdb.cluster.config.ClusterDescriptor;
@@ -80,11 +82,21 @@ public class ClusterRpcQueryManager implements IClusterRpcQueryManager {
   public Map<String, Integer> getAllReadUsage() {
     Map<String, Integer> readerUsageMap = new HashMap<>();
     SINGLE_QUERY_MANAGER_MAP.values().forEach(singleQueryManager -> {
-      for(String groupId:singleQueryManager.getDataGroupUsage()) {
+      for (String groupId : singleQueryManager.getDataGroupUsage()) {
         readerUsageMap.put(groupId, readerUsageMap.getOrDefault(groupId, 0) + 1);
       }
     });
     return readerUsageMap;
+  }
+
+  @Override
+  public void close() throws RaftConnectionException {
+    Iterator<Map.Entry<String, ClusterRpcSingleQueryManager>> iterator = SINGLE_QUERY_MANAGER_MAP.entrySet().iterator();
+    while(iterator.hasNext()){
+      Entry<String, ClusterRpcSingleQueryManager> entry = iterator.next();
+      entry.getValue().releaseQueryResource();
+      iterator.remove();
+    }
   }
 
   @OnlyForTest

@@ -18,6 +18,7 @@
  */
 package org.apache.iotdb.cluster.qp.task;
 
+import com.alipay.sofa.jraft.entity.PeerId;
 import java.util.concurrent.CountDownLatch;
 import org.apache.iotdb.cluster.entity.Server;
 import org.apache.iotdb.cluster.rpc.raft.request.BasicRequest;
@@ -34,6 +35,11 @@ public abstract class QPTask {
    * QPTask request
    */
   protected BasicRequest request;
+
+  /**
+   * The target peer of this task
+   */
+  protected PeerId targetNode;
 
   /**
    * Whether it's a synchronization task or not.
@@ -78,7 +84,7 @@ public abstract class QPTask {
    *
    * @param basicResponse response from receiver
    */
-  public abstract void run(BasicResponse basicResponse);
+  public abstract void receive(BasicResponse basicResponse);
 
   public boolean isSyncTask() {
     return isSyncTask;
@@ -94,6 +100,7 @@ public abstract class QPTask {
 
   public void resetTask() {
     this.taskCountDownLatch = new CountDownLatch(taskNum);
+    this.taskState = TaskState.INITIAL;
   }
 
   public TaskState getTaskState() {
@@ -122,11 +129,44 @@ public abstract class QPTask {
   }
 
   public enum TaskState {
-    INITIAL, REDIRECT, FINISH, EXCEPTION
+
+    /**
+     * Initial state
+     */
+    INITIAL,
+
+    /**
+     * Redirect leader
+     */
+    REDIRECT,
+
+    /**
+     * Task finish
+     */
+    FINISH,
+
+    /**
+     * Occur exception in remote node
+     */
+    EXCEPTION,
+
+    /**
+     * Can not connect to remote node
+     */
+    RAFT_CONNECTION_EXCEPTION
   }
 
   public enum TaskType {
-    SINGLE, BATCH
+
+    /**
+     * Single task
+     */
+    SINGLE,
+
+    /**
+     * Batch task
+     */
+    BATCH
   }
 
   /**
@@ -137,4 +177,12 @@ public abstract class QPTask {
   }
 
   public abstract void shutdown();
+
+  public PeerId getTargetNode() {
+    return targetNode;
+  }
+
+  public void setTargetNode(PeerId targetNode) {
+    this.targetNode = targetNode;
+  }
 }

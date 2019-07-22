@@ -20,15 +20,11 @@ package org.apache.iotdb.cluster.qp.task;
 
 import org.apache.iotdb.cluster.rpc.raft.request.BasicRequest;
 import org.apache.iotdb.cluster.rpc.raft.response.BasicResponse;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 /**
- * Process single task.
+ * Process task(s) for only one raft group, which is used for operations except for querying data.
  */
 public class SingleQPTask extends QPTask {
-
-  private static final Logger LOGGER = LoggerFactory.getLogger(SingleQPTask.class);
 
   private static final int TASK_NUM = 1;
 
@@ -41,11 +37,11 @@ public class SingleQPTask extends QPTask {
    * Process response. If it's necessary to redirect leader, redo the task.
    */
   @Override
-  public void run(BasicResponse response) {
+  public void receive(BasicResponse response) {
     if(taskState != TaskState.EXCEPTION) {
       this.response = response;
       if(response == null){
-        LOGGER.error("Response is null");
+        this.taskState = TaskState.RAFT_CONNECTION_EXCEPTION;
       } else if (response.isRedirected()) {
         this.taskState = TaskState.REDIRECT;
       } else {

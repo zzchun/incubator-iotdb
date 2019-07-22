@@ -36,6 +36,7 @@ import org.apache.iotdb.db.qp.physical.PhysicalPlan;
 import org.apache.iotdb.db.qp.physical.crud.DeletePlan;
 import org.apache.iotdb.db.qp.physical.crud.InsertPlan;
 import org.apache.iotdb.db.qp.physical.crud.UpdatePlan;
+import org.apache.iotdb.db.qp.physical.sys.AuthorPlan;
 import org.apache.iotdb.db.query.context.QueryContext;
 import org.apache.iotdb.db.query.executor.EngineQueryRouter;
 import org.apache.iotdb.db.query.fill.IFill;
@@ -201,9 +202,14 @@ public class MemIntQpExecutor extends QueryProcessExecutor {
   }
 
   @Override
-  public int multiInsert(String deviceId, long insertTime, List<String> measurementList,
-      List<String> insertValues) {
+  public int multiInsert(String deviceId, long insertTime, String[] measurementList,
+      String[] insertValues) {
     return 0;
+  }
+
+  @Override
+  protected QueryDataSet processAuthorQuery(AuthorPlan plan, QueryContext context) {
+    return null;
   }
 
   private class TestSeries {

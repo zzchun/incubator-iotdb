@@ -73,6 +73,7 @@ struct TSExecuteStatementResp {
   // Column names in select statement of SQL
 	3: optional list<string> columns
 	4: optional string operationType
+	5: optional bool ignoreTimeStamp
 }
 
 enum TSProtocolVersion {
@@ -135,7 +136,7 @@ struct TSExecuteStatementReq {
 
 struct TSExecuteBatchStatementResp{
 	1: required TS_Status status
-  // For each value in result, Statement.SUCCESS_NO_INFO represents success, Statement.EXECUTE_FAILED represents fail otherwise.  
+  // For each value in result, Statement.SUCCESS_NO_INFO represents success, Statement.EXECUTE_FAILED represents fail otherwise.
 	2: optional list<i32> result
 }
 

@@ -139,7 +139,7 @@ public class IoTDBStatement implements Statement {
         Utils.verifySuccess(closeResp.getStatus());
       }
     } catch (Exception e) {
-      throw new SQLException("Error occurs when canceling statement because " + e.getMessage(), e);
+      throw new SQLException("Error occurs when canceling statement.", e);
     }
     isCancelled = true;
   }
@@ -165,7 +165,7 @@ public class IoTDBStatement implements Statement {
         Utils.verifySuccess(closeResp.getStatus());
       }
     } catch (Exception e) {
-      throw new SQLException("Error occurs when closing statement because " + e.getMessage(), e);
+      throw new SQLException("Error occurs when closing statement.", e);
     }
   }
 
@@ -252,9 +252,12 @@ public class IoTDBStatement implements Statement {
       operationHandle = execResp.getOperationHandle();
       Utils.verifySuccess(execResp.getStatus());
       if (execResp.getOperationHandle().hasResultSet) {
-        resultSet = new IoTDBQueryResultSet(this, execResp.getColumns(), client,
+        IoTDBQueryResultSet resSet = new IoTDBQueryResultSet(this,
+            execResp.getColumns(), client,
             operationHandle, sql, execResp.getOperationType(),
             getColumnsType(execResp.getColumns()), queryId.getAndIncrement());
+        resSet.setIgnoreTimeStamp(execResp.ignoreTimeStamp);
+        this.resultSet = resSet;
         return true;
       }
       return false;
@@ -348,9 +351,11 @@ public class IoTDBStatement implements Statement {
     TSExecuteStatementResp execResp = client.executeQueryStatement(execReq);
     operationHandle = execResp.getOperationHandle();
     Utils.verifySuccess(execResp.getStatus());
-    resultSet = new IoTDBQueryResultSet(this, execResp.getColumns(), client,
+    IoTDBQueryResultSet resSet = new IoTDBQueryResultSet(this, execResp.getColumns(), client,
         operationHandle, sql, execResp.getOperationType(), getColumnsType(execResp.getColumns()),
         queryId.getAndIncrement());
+    resSet.setIgnoreTimeStamp(execResp.ignoreTimeStamp);
+    this.resultSet = resSet;
     return resultSet;
   }
 
@@ -583,7 +588,7 @@ public class IoTDBStatement implements Statement {
       return resp.getDataType();
     } catch (TException | IoTDBSQLException e) {
       throw new SQLException(
-          String.format("Cannot get column %s data type because %s", columnName, e.getMessage()), e);
+          String.format("Cannot get column %s data type", columnName), e);
     }
   }
 

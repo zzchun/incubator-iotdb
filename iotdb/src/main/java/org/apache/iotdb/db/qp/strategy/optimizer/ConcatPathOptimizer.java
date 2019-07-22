@@ -27,7 +27,6 @@ import org.apache.iotdb.db.exception.qp.LogicalOperatorException;
 import org.apache.iotdb.db.exception.qp.LogicalOptimizeException;
 import org.apache.iotdb.db.qp.constant.SQLConstant;
 import org.apache.iotdb.db.qp.executor.IQueryProcessExecutor;
-import org.apache.iotdb.db.qp.executor.QueryProcessExecutor;
 import org.apache.iotdb.db.qp.logical.Operator;
 import org.apache.iotdb.db.qp.logical.crud.BasicFunctionOperator;
 import org.apache.iotdb.db.qp.logical.crud.FilterOperator;
@@ -306,8 +305,7 @@ public class ConcatPathOptimizer implements ILogicalOptimizer {
             new BasicFunctionOperator(operator.getTokenIntType(), noStarPaths.get(i),
                 ((BasicFunctionOperator) operator).getValue()));
       } catch (LogicalOperatorException e) {
-        LOG.error("meet error while adding child operator to current node.", e);
-        throw new LogicalOptimizeException(e.getMessage());
+        throw new LogicalOptimizeException(e);
       }
     }
     return filterTwoFolkTree;
@@ -326,6 +324,7 @@ public class ConcatPathOptimizer implements ILogicalOptimizer {
       for (Path path : paths) {
         List<String> all;
         all = executor.getAllPaths(path.getFullPath());
+        LOG.debug("All paths of path<{}> is {}", path.getFullPath(), all);
         for (String subPath : all) {
           if (!pathMap.containsKey(subPath)) {
             pathMap.put(subPath, 1);
@@ -336,8 +335,7 @@ public class ConcatPathOptimizer implements ILogicalOptimizer {
         retPaths.add(new Path(pathStr));
       }
     } catch (PathErrorException e) {
-      LOG.error("meet error while removing star.", e);
-      throw new LogicalOptimizeException("error when remove star: " + e.getMessage());
+      throw new LogicalOptimizeException("error when remove star: ", e);
     }
     return retPaths;
   }
@@ -356,8 +354,8 @@ public class ConcatPathOptimizer implements ILogicalOptimizer {
           }
         }
       } catch (PathErrorException e) {
-        LOG.error("meet error while removing star.", e);
-        throw new LogicalOptimizeException("error when remove star: " + e.getMessage());
+        throw new LogicalOptimizeException(
+            String.format("error when remove star: %s", e.getMessage()), e);
       }
     }
     if (retPaths.isEmpty()) {

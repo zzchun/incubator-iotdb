@@ -19,16 +19,16 @@
 package org.apache.iotdb.cluster.qp.executor;
 
 import com.alipay.sofa.jraft.entity.PeerId;
+import java.util.HashSet;
+import java.util.Set;
 import org.apache.iotdb.cluster.config.ClusterConfig;
-import org.apache.iotdb.cluster.config.ClusterConstant;
 import org.apache.iotdb.cluster.config.ClusterDescriptor;
 import org.apache.iotdb.cluster.entity.Server;
-import org.apache.iotdb.cluster.exception.ConsistencyLevelException;
 import org.apache.iotdb.cluster.exception.RaftConnectionException;
 import org.apache.iotdb.cluster.qp.task.QPTask;
 import org.apache.iotdb.cluster.qp.task.QPTask.TaskState;
 import org.apache.iotdb.cluster.qp.task.SingleQPTask;
-import org.apache.iotdb.cluster.rpc.raft.NodeAsClient;
+import org.apache.iotdb.cluster.rpc.raft.impl.RaftNodeAsClientManager;
 import org.apache.iotdb.cluster.rpc.raft.response.BasicResponse;
 import org.apache.iotdb.cluster.utils.RaftUtils;
 import org.apache.iotdb.cluster.utils.hash.Router;
@@ -87,59 +87,102 @@ public abstract class AbstractQPExecutor {
    * Async handle QPTask by QPTask and leader id
    *
    * @param task request QPTask
-   * @param leader leader of the target raft group
    * @param taskRetryNum Number of QPTask retries due to timeout and redirected.
    * @return basic response
    */
-  protected BasicResponse asyncHandleNonQuerySingleTaskGetRes(SingleQPTask task, PeerId leader,
-      int taskRetryNum)
+  private BasicResponse syncHandleSingleTaskGetRes(SingleQPTask task, int taskRetryNum, String taskInfo, String groupId, Set<PeerId> downNodeSet)
       throws InterruptedException, RaftConnectionException {
-    asyncSendNonQuerySingleTask(task, leader, taskRetryNum);
-    return syncGetNonQueryRes(task, leader, taskRetryNum);
+    PeerId firstNode = task.getTargetNode();
+    RaftUtils.updatePeerIDOrder(firstNode, groupId);
+    BasicResponse response;
+    try {
+      asyncSendSingleTask(task, taskRetryNum);
+      response = syncGetSingleTaskRes(task, taskRetryNum, taskInfo, groupId, downNodeSet);
+      return response;
+    } catch (RaftConnectionException ex) {
+      downNodeSet.add(firstNode);
+      while (true) {
+        PeerId nextNode = null;
+        try {
+          nextNode = RaftUtils.getPeerIDInOrder(groupId);
+          if (firstNode.equals(nextNode)) {
+            break;
+          }
+          LOGGER.debug(
+              "Previous task fail, then send {} task for group {} to node {}.", taskInfo, groupId,
+              nextNode);
+          task.resetTask();
+          task.setTargetNode(nextNode);
+          asyncSendSingleTask(task, taskRetryNum);
+          response = syncGetSingleTaskRes(task, taskRetryNum, taskInfo, groupId, downNodeSet);
+          LOGGER.debug("{} task for group {} to node {} succeed.", taskInfo, groupId, nextNode);
+          return response;
+        } catch (RaftConnectionException e1) {
+          LOGGER.debug("{} task for group {} to node {} fail.", taskInfo, groupId, nextNode);
+          downNodeSet.add(nextNode);
+        }
+      }
+      throw new RaftConnectionException(String
+          .format("Can not %s in all nodes of group<%s>, please check cluster status.",
+              taskInfo, groupId));
+    }
+  }
+
+  protected BasicResponse syncHandleSingleTaskGetRes(SingleQPTask task, int taskRetryNum, String taskInfo, String groupId)
+      throws RaftConnectionException, InterruptedException {
+    return syncHandleSingleTaskGetRes(task, taskRetryNum, taskInfo, groupId, new HashSet<>());
   }
 
   /**
    * Asynchronous send rpc task via client
    *  @param task rpc task
-   * @param leader leader node of the group
    * @param taskRetryNum Retry time of the task
    */
-  protected void asyncSendNonQuerySingleTask(SingleQPTask task, PeerId leader, int taskRetryNum)
+  protected void asyncSendSingleTask(SingleQPTask task, int taskRetryNum)
       throws RaftConnectionException {
     if (taskRetryNum >= TASK_MAX_RETRY) {
       throw new RaftConnectionException(String.format("QPTask retries reach the upper bound %s",
           TASK_MAX_RETRY));
     }
-    NodeAsClient client = RaftUtils.getRaftNodeAsClient();
-    /** Call async method **/
-    client.asyncHandleRequest(task.getRequest(), leader, task);
+    RaftNodeAsClientManager.getInstance().produceQPTask(task);
   }
 
   /**
    * Synchronous get task response. If it's redirected or status is exception, the task needs to be
    * resent. Note: If status is Exception, it marks that an exception occurred during the task is
    * being sent instead of executed.
-   *  @param task rpc task
-   * @param leader leader node of the group
+   * @param task rpc task
    * @param taskRetryNum Retry time of the task
    */
-  private BasicResponse syncGetNonQueryRes(SingleQPTask task, PeerId leader, int taskRetryNum)
+  private BasicResponse syncGetSingleTaskRes(SingleQPTask task, int taskRetryNum, String taskInfo, String groupId, Set<PeerId> downNodeSet)
       throws InterruptedException, RaftConnectionException {
     task.await();
+    PeerId leader;
     if (task.getTaskState() != TaskState.FINISH) {
-      if (task.getTaskState() == TaskState.REDIRECT) {
-        /** redirect to the right leader **/
+      if (task.getTaskState() == TaskState.RAFT_CONNECTION_EXCEPTION) {
+        throw new RaftConnectionException(
+            String.format("Can not connect to remote node : %s", task.getTargetNode()));
+      } else if (task.getTaskState() == TaskState.REDIRECT) {
+        // redirect to the right leader
         leader = PeerId.parsePeer(task.getResponse().getLeaderStr());
-        LOGGER.debug("Redirect leader: {}, group id = {}", leader, task.getRequest().getGroupID());
-        RaftUtils.updateRaftGroupLeader(task.getRequest().getGroupID(), leader);
+
+        if (downNodeSet.contains(leader)) {
+          LOGGER.debug("Redirect leader {} is down, group {} might be down.", leader, groupId);
+          throw new RaftConnectionException(
+              String.format("Can not connect to leader of remote node : %s", task.getTargetNode()));
+        } else {
+          LOGGER
+              .debug("Redirect leader: {}, group id = {}", leader, task.getRequest().getGroupID());
+          RaftUtils.updateRaftGroupLeader(task.getRequest().getGroupID(), leader);
+        }
       } else {
-        String groupId = task.getRequest().getGroupID();
         RaftUtils.removeCachedRaftGroupLeader(groupId);
         LOGGER.debug("Remove cached raft group leader of {}", groupId);
-        leader = RaftUtils.getLeaderPeerID(groupId);
+        leader = RaftUtils.getLocalLeaderPeerID(groupId);
       }
+      task.setTargetNode(leader);
       task.resetTask();
-      return asyncHandleNonQuerySingleTaskGetRes(task, leader, taskRetryNum + 1);
+      return syncHandleSingleTaskGetRes(task, taskRetryNum + 1, taskInfo, groupId, downNodeSet);
     }
     return task.getResponse();
   }
@@ -150,20 +193,12 @@ public abstract class AbstractQPExecutor {
     }
   }
 
-  public void setReadMetadataConsistencyLevel(int level) throws ConsistencyLevelException {
-    if (level <= ClusterConstant.MAX_CONSISTENCY_LEVEL) {
-      readMetadataConsistencyLevel.set(level);
-    } else {
-      throw new ConsistencyLevelException(String.format("Consistency level %d not support", level));
-    }
+  public void setReadMetadataConsistencyLevel(int level) {
+    readMetadataConsistencyLevel.set(level);
   }
 
-  public void setReadDataConsistencyLevel(int level) throws ConsistencyLevelException {
-    if (level <= ClusterConstant.MAX_CONSISTENCY_LEVEL) {
-      readDataConsistencyLevel.set(level);
-    } else {
-      throw new ConsistencyLevelException(String.format("Consistency level %d not support", level));
-    }
+  public void setReadDataConsistencyLevel(int level) {
+    readDataConsistencyLevel.set(level);
   }
 
   public int getReadMetadataConsistencyLevel() {
@@ -174,5 +209,17 @@ public abstract class AbstractQPExecutor {
   public int getReadDataConsistencyLevel() {
     checkInitConsistencyLevel();
     return readDataConsistencyLevel.get();
+  }
+
+  /**
+   * Async handle task by SingleQPTask and leader id.
+   *
+   * @param task request SingleQPTask
+   * @return request result
+   */
+  public boolean syncHandleSingleTask(SingleQPTask task, String taskInfo, String groupId)
+      throws RaftConnectionException, InterruptedException {
+    BasicResponse response = syncHandleSingleTaskGetRes(task, 0, taskInfo, groupId);
+    return response != null && response.isSuccess();
   }
 }

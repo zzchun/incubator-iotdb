@@ -40,19 +40,16 @@ public class DataGroupNonQueryAsyncProcessor extends
   private static final Logger LOGGER = LoggerFactory
       .getLogger(DataGroupNonQueryAsyncProcessor.class);
 
-  public DataGroupNonQueryAsyncProcessor() {
-  }
-
   @Override
   public void handleRequest(BizContext bizContext, AsyncContext asyncContext,
       DataGroupNonQueryRequest request) {
     LOGGER.debug("Handle data non query request");
 
-    /** Check if it's the leader **/
+    /* Check if it's the leader */
     String groupId = request.getGroupID();
     DataPartitionRaftHolder dataPartitionRaftHolder = RaftUtils.getDataPartitonRaftHolder(groupId);
     if (!dataPartitionRaftHolder.getFsm().isLeader()) {
-      PeerId leader = RaftUtils.getLeaderPeerID(groupId);
+      PeerId leader = RaftUtils.getLocalLeaderPeerID(groupId);
       LOGGER.debug("Request need to redirect leader: {}, groupId : {} ", leader, groupId);
 
       DataGroupNonQueryResponse response = DataGroupNonQueryResponse
@@ -61,7 +58,8 @@ public class DataGroupNonQueryAsyncProcessor extends
     } else {
       LOGGER.debug("Apply task to raft node");
 
-      /** Apply Task to Raft Node **/
+
+      /* Apply Task to Raft Node */
       BasicResponse response = DataGroupNonQueryResponse.createEmptyResponse(groupId);
       RaftService service = (RaftService) dataPartitionRaftHolder.getService();
       RaftUtils.executeRaftTaskForRpcProcessor(service, asyncContext, request, response);

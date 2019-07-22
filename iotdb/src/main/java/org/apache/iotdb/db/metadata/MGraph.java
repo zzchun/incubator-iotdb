@@ -241,10 +241,10 @@ public class MGraph implements Serializable {
   public Metadata getMetadata() throws PathErrorException {
     Map<String, List<MeasurementSchema>> seriesMap = getSchemaForAllType();
     Map<String, List<String>> deviceIdMap = getDeviceForAllType();
-    return new Metadata(seriesMap, deviceIdMap);
+    return new Metadata(deviceIdMap);
   }
 
-  public HashSet<String> getAllStorageGroup() throws PathErrorException {
+  public HashSet<String> getAllStorageGroup() {
     return mtree.getAllStorageGroup();
   }
 
@@ -370,20 +370,13 @@ public class MGraph implements Serializable {
    */
   @Override
   public String toString() {
-    StringBuilder sb = new StringBuilder();
-    sb.append(TIME_SERIES_TREE_HEADER);
-    sb.append(mtree.toString());
-    return sb.toString();
+    return mtree.toString();
   }
 
   /**
    * combine multiple metadata in string format
    */
   public static String combineMetadataInStrings(String[] metadatas) {
-    for (int i = 0; i < metadatas.length; i++) {
-      metadatas[i] = metadatas[i].replace(TIME_SERIES_TREE_HEADER, "");
-    }
-    String res = MTree.combineMetadataInStrings(metadatas);
-    return TIME_SERIES_TREE_HEADER + res;
+    return MTree.combineMetadataInStrings(metadatas);
   }
 }
