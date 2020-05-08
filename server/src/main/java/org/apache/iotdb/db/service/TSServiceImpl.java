@@ -265,6 +265,7 @@ public class TSServiceImpl implements TSIService.Iface, ServerContext {
   protected void releaseQueryResource(long queryId) throws StorageEngineException {
     // remove the corresponding Physical Plan
     queryId2DataSet.remove(queryId);
+    logger.warn("remove queryid {} from keyset {}", queryId, queryId2DataSet.keySet());
     QueryResourceManager.getInstance().endQuery(queryId);
   }
 
@@ -741,10 +742,12 @@ public class TSServiceImpl implements TSIService.Iface, ServerContext {
       }
 
       if (!queryId2DataSet.containsKey(req.queryId)) {
+        logger.warn("@++++<<<< queryid {}  does not exist in queryId2DataSet keyset {}", req.queryId, queryId2DataSet.keySet());
         return RpcUtils.getTSFetchResultsResp(
             RpcUtils.getStatus(TSStatusCode.EXECUTE_STATEMENT_ERROR, "Has not executed query"));
       }
 
+      logger.warn("@++++<<<< queryid {} exist in queryId2DataSet keyset {}", req.queryId, queryId2DataSet.keySet());
       QueryDataSet queryDataSet = queryId2DataSet.get(req.queryId);
       if (req.isAlign) {
         TSQueryDataSet result =
@@ -771,6 +774,7 @@ public class TSServiceImpl implements TSIService.Iface, ServerContext {
         }
         if (!hasResultSet) {
           queryId2DataSet.remove(req.queryId);
+          logger.warn("remove queryid {} from keyset {}", req.queryId, queryId2DataSet.keySet());
         }
         TSFetchResultsResp resp = RpcUtils.getTSFetchResultsResp(TSStatusCode.SUCCESS_STATUS);
         resp.setHasResultSet(hasResultSet);
@@ -863,6 +867,7 @@ public class TSServiceImpl implements TSIService.Iface, ServerContext {
     QueryContext context = genQueryContext(queryId);
     QueryDataSet queryDataSet = executor.processQuery(physicalPlan, context);
     queryId2DataSet.put(queryId, queryDataSet);
+    logger.warn("@+++++<<<<: put queryId {} to queryId2DataSet", queryId);
     return queryDataSet;
   }
 
