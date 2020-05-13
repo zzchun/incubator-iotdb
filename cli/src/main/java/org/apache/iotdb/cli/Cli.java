@@ -53,6 +53,11 @@ public class Cli extends AbstractCli {
     hf.setWidth(MAX_HELP_CONSOLE_WIDTH);
     commandLine = null;
 
+    if (args[0].equals("sessionInsert")) {
+      SessionTest.sessionInsert();
+      return;
+    }
+
     String[] newArgs;
     String[] newArgs2;
 
