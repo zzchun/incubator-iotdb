@@ -20,6 +20,7 @@ package org.apache.iotdb.cli;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Random;
 import org.apache.iotdb.rpc.IoTDBConnectionException;
 import org.apache.iotdb.rpc.StatementExecutionException;
 import org.apache.iotdb.session.pool.SessionDataSetWrapper;
@@ -58,6 +59,8 @@ public class SessionTest {
 
     private int device;
 
+    Random random = new Random();
+
     public Write(int i) {
       this.device = i;
     }
@@ -68,11 +71,11 @@ public class SessionTest {
 
       long time = 0;
       while (true) {
-        try {
-          Thread.sleep(1000);
-        } catch (InterruptedException e) {
-          e.printStackTrace();
-        }
+//        try {
+//          Thread.sleep(1000);
+//        } catch (InterruptedException e) {
+//          e.printStackTrace();
+//        }
         long start = System.currentTimeMillis();
         time += 5000;
         String deviceId = "root.sg.d1";
@@ -83,11 +86,11 @@ public class SessionTest {
 
         List<String> values = new ArrayList<>();
         for (int i = 0; i < 50000; i++) {
-          values.add("1");
+          values.add(random.nextInt(1000) + "");
         }
 
         try {
-          session.insertRecord(deviceId, time, measurements, values);
+          session.insertRecord(deviceId, time - random.nextInt(10000), measurements, values);
         } catch (IoTDBConnectionException e) {
           e.printStackTrace();
         } catch (StatementExecutionException e) {
