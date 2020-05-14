@@ -71,11 +71,13 @@ public class SessionTest {
 
       long time = 0;
       while (true) {
-//        try {
-//          Thread.sleep(1000);
-//        } catch (InterruptedException e) {
-//          e.printStackTrace();
-//        }
+        if (device >= 4) {
+          try {
+            Thread.sleep(100);
+          } catch (InterruptedException e) {
+            e.printStackTrace();
+          }
+        }
         long start = System.currentTimeMillis();
         time += 5000;
         String deviceId = "root.sg.d1";
@@ -86,11 +88,11 @@ public class SessionTest {
 
         List<String> values = new ArrayList<>();
         for (int i = 0; i < 50000; i++) {
-          values.add(random.nextInt(1000) + "");
+          values.add("1");
         }
 
         try {
-          session.insertRecord(deviceId, time - random.nextInt(10000), measurements, values);
+          session.insertRecord(deviceId, time, measurements, values);
         } catch (IoTDBConnectionException e) {
           e.printStackTrace();
         } catch (StatementExecutionException e) {
