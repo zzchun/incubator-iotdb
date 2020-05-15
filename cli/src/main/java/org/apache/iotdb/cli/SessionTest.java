@@ -88,7 +88,7 @@ public class SessionTest {
 
         List<String> values = new ArrayList<>();
         for (int i = 0; i < 50000; i++) {
-          values.add("1");
+          values.add(random.nextInt(1000) + "");
         }
 
         try {
