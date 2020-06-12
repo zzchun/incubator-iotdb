@@ -86,11 +86,11 @@ public class MapType implements StructuredType {
     @Override
     public String toString() {
         StringBuilder builder = new StringBuilder();
-        builder.append("{\n");
+        builder.append("{");
         for (Map.Entry<String, StructuredType> entry : this.children.entrySet()) {
-            builder.append("\"" + entry.getKey() + "\": " + entry.getValue().toString() + ",\n");
+            builder.append("\"" + entry.getKey() + "\": " + entry.getValue().toString() + ",");
         }
-        builder.append("}\n");
+        builder.append("}");
         return builder.toString();
     }
 }

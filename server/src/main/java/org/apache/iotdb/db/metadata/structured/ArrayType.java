@@ -63,4 +63,8 @@ public class ArrayType implements StructuredType {
         throw new UnsupportedOperationException();
     }
 
+    @Override
+    public String toString() {
+        return arrayType.toString() + "[]";
+    }
 }

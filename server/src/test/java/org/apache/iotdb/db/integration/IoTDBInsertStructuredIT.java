@@ -192,7 +192,10 @@ public class IoTDBInsertStructuredIT implements WithAssertions {
       carMap.put("look", new MapType(lookMap));
       carMap.put("drivers", new ArrayType(new PrimitiveType(TSDataType.TEXT, TSEncoding.PLAIN, CompressionType.UNCOMPRESSED)));
 
-      SManager.getInstance().register("car", new MapType(carMap));
+      MapType carType = new MapType(carMap);
+      System.out.println("Using Type: " + carType);
+
+      SManager.getInstance().register("car", carType);
 
       // Insert value
       statement.execute("INSERT INTO root.sg1.d1 (timestamp, coordinates) VALUES (NOW(), \"{\\\"max_speed\\\": 160.0, \\\"look\\\":{\\\"clean\\\":true, \\\"color\\\": \\\"blue\\\"}, \\\"drivers\\\":[\\\"julian\\\", \\\"xiangdong\\\"]}::car\")");

@@ -85,10 +85,6 @@ public class PrimitiveType implements StructuredType {
 
     @Override
     public String toString() {
-        return "PrimitiveType{" +
-                "type=" + type +
-                ", encoding=" + encoding +
-                ", compression=" + compression +
-                '}';
+        return type.toString();
     }
 }
