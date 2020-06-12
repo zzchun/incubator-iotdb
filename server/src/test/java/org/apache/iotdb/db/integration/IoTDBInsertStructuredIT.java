@@ -18,10 +18,8 @@
  */
 package org.apache.iotdb.db.integration;
 
-import org.apache.iotdb.db.metadata.structured.MapType;
-import org.apache.iotdb.db.metadata.structured.PrimitiveType;
-import org.apache.iotdb.db.metadata.structured.SManager;
-import org.apache.iotdb.db.metadata.structured.StructuredType;
+import org.apache.iotdb.db.metadata.structured.*;
+import org.apache.iotdb.db.qp.physical.crud.InsertPlan;
 import org.apache.iotdb.db.utils.EnvironmentUtils;
 import org.apache.iotdb.jdbc.Config;
 import org.apache.iotdb.tsfile.file.metadata.enums.CompressionType;
@@ -34,6 +32,7 @@ import org.junit.BeforeClass;
 import org.junit.Test;
 
 import java.sql.*;
+import java.util.ArrayList;
 import java.util.HashMap;
 
 import static org.junit.Assert.assertThat;
@@ -73,7 +72,7 @@ public class IoTDBInsertStructuredIT implements WithAssertions {
   }
 
   @Test
-  public void showTimeseries() throws ClassNotFoundException {
+  public void insertMap() throws ClassNotFoundException {
     String[] retArray = new String[]{
         "root.sg1.d1.\"coordinates.lat\",null,root.sg1,DOUBLE,GORILLA,SNAPPY,",
         "root.sg1.d1.\"coordinates.long\",null,root.sg1,DOUBLE,GORILLA,SNAPPY,",
@@ -92,6 +91,114 @@ public class IoTDBInsertStructuredIT implements WithAssertions {
 
       boolean hasResultSet = statement.execute(
           "SHOW TIMESERIES");
+      Assert.assertTrue(hasResultSet);
+
+      try (ResultSet resultSet = statement.getResultSet()) {
+        ResultSetMetaData resultSetMetaData = resultSet.getMetaData();
+        StringBuilder header = new StringBuilder();
+        for (int i = 1; i <= resultSetMetaData.getColumnCount(); i++) {
+          header.append(resultSetMetaData.getColumnName(i)).append(",");
+        }
+        Assert.assertEquals("timeseries,alias,storage group,dataType,encoding,compression,", header.toString());
+        Assert.assertEquals(Types.VARCHAR, resultSetMetaData.getColumnType(1));
+
+        int cnt = 0;
+        while (resultSet.next()) {
+          StringBuilder builder = new StringBuilder();
+          for (int i = 1; i <= resultSetMetaData.getColumnCount(); i++) {
+            builder.append(resultSet.getString(i)).append(",");
+          }
+          Assert.assertEquals(retArray[cnt], builder.toString());
+          cnt++;
+        }
+        Assert.assertEquals(retArray.length, cnt);
+      }
+    } catch (Exception e) {
+      e.printStackTrace();
+      fail(e.getMessage());
+    }
+  }
+
+  @Test
+  public void insertArray() throws ClassNotFoundException {
+    String[] retArray = new String[]{
+            "root.sg1.d1.coordinates[0],null,root.sg1,INT32,RLE,SNAPPY,",
+            "root.sg1.d1.coordinates[1],null,root.sg1,INT32,RLE,SNAPPY,",
+    };
+
+    Class.forName(Config.JDBC_DRIVER_NAME);
+    try (Connection connection = DriverManager
+            .getConnection(Config.IOTDB_URL_PREFIX + "127.0.0.1:6667/", "root", "root");
+         Statement statement = connection.createStatement()) {
+
+      // Prepare type
+      SManager.getInstance().register("two_int", new ArrayType(new PrimitiveType(TSDataType.INT32, TSEncoding.RLE, CompressionType.SNAPPY)));
+
+      // Insert value
+      statement.execute("INSERT INTO root.sg1.d1 (timestamp, coordinates) VALUES (NOW(), \"[1,2]::two_int\")");
+
+      boolean hasResultSet = statement.execute(
+              "SHOW TIMESERIES");
+      Assert.assertTrue(hasResultSet);
+
+      try (ResultSet resultSet = statement.getResultSet()) {
+        ResultSetMetaData resultSetMetaData = resultSet.getMetaData();
+        StringBuilder header = new StringBuilder();
+        for (int i = 1; i <= resultSetMetaData.getColumnCount(); i++) {
+          header.append(resultSetMetaData.getColumnName(i)).append(",");
+        }
+        Assert.assertEquals("timeseries,alias,storage group,dataType,encoding,compression,", header.toString());
+        Assert.assertEquals(Types.VARCHAR, resultSetMetaData.getColumnType(1));
+
+        int cnt = 0;
+        while (resultSet.next()) {
+          StringBuilder builder = new StringBuilder();
+          for (int i = 1; i <= resultSetMetaData.getColumnCount(); i++) {
+            builder.append(resultSet.getString(i)).append(",");
+          }
+          Assert.assertEquals(retArray[cnt], builder.toString());
+          cnt++;
+        }
+        Assert.assertEquals(retArray.length, cnt);
+      }
+    } catch (Exception e) {
+      e.printStackTrace();
+      fail(e.getMessage());
+    }
+  }
+
+  @Test
+  public void insertComplex() throws ClassNotFoundException {
+    String[] retArray = new String[]{
+            "root.sg1.d1.\"coordinates.max_speed\",null,root.sg1,DOUBLE,GORILLA,SNAPPY,",
+            "root.sg1.d1.\"coordinates.look.color\",null,root.sg1,TEXT,PLAIN,SNAPPY,",
+            "root.sg1.d1.\"coordinates.look.clean\",null,root.sg1,BOOLEAN,RLE,SNAPPY,",
+            "root.sg1.d1.\"coordinates.drivers[0]\",null,root.sg1,TEXT,PLAIN,SNAPPY,",
+            "root.sg1.d1.\"coordinates.drivers[1]\",null,root.sg1,TEXT,PLAIN,SNAPPY,",
+    };
+
+    Class.forName(Config.JDBC_DRIVER_NAME);
+    try (Connection connection = DriverManager
+            .getConnection(Config.IOTDB_URL_PREFIX + "127.0.0.1:6667/", "root", "root");
+         Statement statement = connection.createStatement()) {
+
+      // Prepare type
+      HashMap<String, StructuredType> lookMap = new HashMap<>();
+      lookMap.put("clean", new PrimitiveType(TSDataType.BOOLEAN, TSEncoding.PLAIN, CompressionType.UNCOMPRESSED));
+      lookMap.put("color", new PrimitiveType(TSDataType.TEXT, TSEncoding.PLAIN, CompressionType.UNCOMPRESSED));
+
+      HashMap<String, StructuredType> carMap = new HashMap<>();
+      carMap.put("max_speed", new PrimitiveType(TSDataType.DOUBLE, TSEncoding.GORILLA, CompressionType.GZIP));
+      carMap.put("look", new MapType(lookMap));
+      carMap.put("drivers", new ArrayType(new PrimitiveType(TSDataType.TEXT, TSEncoding.PLAIN, CompressionType.UNCOMPRESSED)));
+
+      SManager.getInstance().register("car", new MapType(carMap));
+
+      // Insert value
+      statement.execute("INSERT INTO root.sg1.d1 (timestamp, coordinates) VALUES (NOW(), \"{\\\"max_speed\\\": 160.0, \\\"look\\\":{\\\"clean\\\":true, \\\"color\\\": \\\"blue\\\"}, \\\"drivers\\\":[\\\"julian\\\", \\\"xiangdong\\\"]}::car\")");
+
+      boolean hasResultSet = statement.execute(
+              "SHOW TIMESERIES");
       Assert.assertTrue(hasResultSet);
 
       try (ResultSet resultSet = statement.getResultSet()) {

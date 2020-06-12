@@ -49,7 +49,7 @@ public class PrimitiveType implements StructuredType {
     }
 
     @Override
-    public StructuredType getItem(int index) {
+    public StructuredType getArrayType() {
         throw new UnsupportedOperationException();
     }
 

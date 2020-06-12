@@ -23,7 +23,7 @@ public interface StructuredType {
 
     boolean isArray();
 
-    StructuredType getItem(int index);
+    StructuredType getArrayType();
 
     boolean isMap();
 

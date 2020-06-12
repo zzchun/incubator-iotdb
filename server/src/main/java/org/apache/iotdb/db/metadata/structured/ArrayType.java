@@ -8,21 +8,14 @@ import org.apache.iotdb.tsfile.file.metadata.enums.CompressionType;
 import org.apache.iotdb.tsfile.file.metadata.enums.TSDataType;
 import org.apache.iotdb.tsfile.file.metadata.enums.TSEncoding;
 
-import java.util.HashMap;
-import java.util.Map;
-import java.util.Objects;
 import java.util.Set;
 
-public class MapType implements StructuredType {
+public class ArrayType implements StructuredType {
 
-    private final Map<String, StructuredType> children;
+    private final StructuredType arrayType;
 
-    public MapType() {
-        this(new HashMap<>());
-    }
-
-    public MapType(Map<String, StructuredType> children) {
-        this.children = children;
+    public ArrayType(StructuredType arrayType) {
+        this.arrayType = arrayType;
     }
 
     @Override
@@ -47,50 +40,27 @@ public class MapType implements StructuredType {
 
     @Override
     public boolean isArray() {
-        return false;
-    }
-
-    @Override
-    public StructuredType getArrayType() {
-        throw new UnsupportedOperationException();
-    }
-
-    @Override
-    public boolean isMap() {
         return true;
     }
 
     @Override
+    public StructuredType getArrayType() {
+        return this.arrayType;
+    }
+
+    @Override
+    public boolean isMap() {
+        return false;
+    }
+
+    @Override
     public Set<String> getKeySet() {
-        return this.children.keySet();
+        throw new UnsupportedOperationException();
     }
 
     @Override
     public StructuredType getChild(String name) {
-        return this.children.get(name);
+        throw new UnsupportedOperationException();
     }
 
-    @Override
-    public boolean equals(Object o) {
-        if (this == o) return true;
-        if (o == null || getClass() != o.getClass()) return false;
-        MapType mapType = (MapType) o;
-        return Objects.equals(children, mapType.children);
-    }
-
-    @Override
-    public int hashCode() {
-        return Objects.hash(children);
-    }
-
-    @Override
-    public String toString() {
-        StringBuilder builder = new StringBuilder();
-        builder.append("{\n");
-        for (Map.Entry<String, StructuredType> entry : this.children.entrySet()) {
-            builder.append("\"" + entry.getKey() + "\": " + entry.getValue().toString() + ",\n");
-        }
-        builder.append("}\n");
-        return builder.toString();
-    }
 }
