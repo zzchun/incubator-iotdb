@@ -315,3 +315,7 @@ service TSIService {
 
   i64 requestCommitId(1:i64 headerId)
 }
+
+service TestService {
+  binary testRequest(1:binary load)
+}

@@ -88,7 +88,6 @@ import org.apache.iotdb.db.utils.QueryDataSetUtils;
 import org.apache.iotdb.db.utils.SchemaUtils;
 import org.apache.iotdb.rpc.IoTDBConnectionException;
 import org.apache.iotdb.rpc.RpcUtils;
-import org.apache.iotdb.rpc.StatementExecutionException;
 import org.apache.iotdb.rpc.TSStatusCode;
 import org.apache.iotdb.service.rpc.thrift.ServerProperties;
 import org.apache.iotdb.service.rpc.thrift.TSCancelOperationReq;
@@ -107,7 +106,6 @@ import org.apache.iotdb.service.rpc.thrift.TSFetchResultsReq;
 import org.apache.iotdb.service.rpc.thrift.TSFetchResultsResp;
 import org.apache.iotdb.service.rpc.thrift.TSGetTimeZoneResp;
 import org.apache.iotdb.service.rpc.thrift.TSIService;
-import org.apache.iotdb.service.rpc.thrift.TSIService.Client;
 import org.apache.iotdb.service.rpc.thrift.TSInsertRecordReq;
 import org.apache.iotdb.service.rpc.thrift.TSInsertRecordsReq;
 import org.apache.iotdb.service.rpc.thrift.TSInsertTabletReq;
@@ -119,6 +117,7 @@ import org.apache.iotdb.service.rpc.thrift.TSQueryDataSet;
 import org.apache.iotdb.service.rpc.thrift.TSQueryNonAlignDataSet;
 import org.apache.iotdb.service.rpc.thrift.TSSetTimeZoneReq;
 import org.apache.iotdb.service.rpc.thrift.TSStatus;
+import org.apache.iotdb.service.rpc.thrift.TestService;
 import org.apache.iotdb.tsfile.common.conf.TSFileConfig;
 import org.apache.iotdb.tsfile.exception.filter.QueryFilterOptimizationException;
 import org.apache.iotdb.tsfile.exception.write.UnSupportedDataTypeException;
@@ -129,13 +128,15 @@ import org.apache.iotdb.tsfile.read.common.Path;
 import org.apache.iotdb.tsfile.read.query.dataset.QueryDataSet;
 import org.apache.iotdb.tsfile.utils.ReadWriteIOUtils;
 import org.apache.thrift.TException;
+import org.apache.thrift.async.AsyncMethodCallback;
+import org.apache.thrift.async.TAsyncClientManager;
 import org.apache.thrift.protocol.TBinaryProtocol;
 import org.apache.thrift.protocol.TProtocol;
 import org.apache.thrift.server.ServerContext;
 import org.apache.thrift.transport.TFastFramedTransport;
+import org.apache.thrift.transport.TNonblockingSocket;
 import org.apache.thrift.transport.TSocket;
 import org.apache.thrift.transport.TTransport;
-import org.eclipse.jetty.server.session.Session;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -143,7 +144,8 @@ import org.slf4j.LoggerFactory;
 /**
  * Thrift RPC implementation at server side.
  */
-public class TSServiceImpl implements TSIService.Iface, ServerContext {
+public class TSServiceImpl implements TSIService.Iface, ServerContext, TestService.Iface,
+    TestService.AsyncIface {
 
   private static final Logger logger = LoggerFactory.getLogger(TSServiceImpl.class);
   private static final String INFO_NOT_LOGIN = "{}: Not login.";
@@ -1492,6 +1494,22 @@ public class TSServiceImpl implements TSIService.Iface, ServerContext {
     return SchemaUtils.getSeriesTypesByString(paths, aggregation);
   }
 
+
+  private static int responseSize = 4;
+  @Override
+  public ByteBuffer testRequest(ByteBuffer load) {
+    ByteBuffer allocate = ByteBuffer.allocate(responseSize);
+    allocate.limit(responseSize);
+    return allocate;
+  }
+
+  @Override
+  public void testRequest(ByteBuffer load, AsyncMethodCallback<ByteBuffer> resultHandler) {
+    ByteBuffer allocate = ByteBuffer.allocate(responseSize);
+    allocate.limit(responseSize);
+    resultHandler.onComplete(allocate);
+  }
+
   @Override
   public long requestCommitId(long headerId) {
     return 0;
@@ -1638,41 +1656,138 @@ public class TSServiceImpl implements TSIService.Iface, ServerContext {
     return req;
   }
 
-  public static void main(String[] args) throws TException {
+  static class TestRequestHandler implements AsyncMethodCallback<ByteBuffer> {
+
+    private volatile boolean hasResult = false;
+    private volatile ByteBuffer result;
+    private volatile Exception e;
+
+    @Override
+    public void onComplete(ByteBuffer response) {
+      synchronized (this) {
+        result = response;
+        hasResult = true;
+        this.notifyAll();
+      }
+    }
+
+    @Override
+    public void onError(Exception exception) {
+      synchronized (this) {
+        e = exception;
+        hasResult = true;
+        this.notifyAll();
+      }
+    }
+
+    public ByteBuffer get() throws Exception {
+      synchronized (this) {
+        while (!hasResult) {
+          try {
+            this.wait();
+          } catch (InterruptedException ex) {
+            ex.printStackTrace();
+            break;
+          }
+        }
+        if (e != null) {
+          throw e;
+        } else {
+          return result;
+        }
+      }
+    }
+  }
+
+  // args : <ip> <port> <addAnEmptyRequestBeforeEachRequest> <loadSize> <useAsyncClient>
+  // e.g. : 127.0.0.1 6668 0 1000 true
+  //        127.0.0.1 6669 0 1000 false
+  public static void main(String[] args) {
     System.out.println("main ...");
 
     AtomicInteger globalCnt = new AtomicInteger();
-    AtomicLong globalTime = new AtomicLong();
     long startTime = System.currentTimeMillis();
+
+    String ip = args[0];
+    // the synchronized test service is bound to rpcPort + 1 and the asynchronized test service
+    // is bound to rpcPort + 2, so by default if you test sync client you should use 6668 and
+    // 6669 for async client
+    int port = Integer.parseInt(args[1]);
     int clientNum = Integer.parseInt(args[2]);
     int addSync = Integer.parseInt(args[3]);
-    int pointNum = Integer.parseInt(args[4]);
-    List<TSInsertRecordsReq> reqs = new ArrayList<>(clientNum);
+    int loadSize = Integer.parseInt(args[4]);
+    boolean useSyncClient = Boolean.parseBoolean(args[5]);
+
+    if (useSyncClient) {
+      System.out.println("Test sync");
+    } else {
+      System.out.println("Test async");
+    }
+
     ExecutorService pool = Executors.newFixedThreadPool(clientNum);
     for (int i = 0; i < clientNum; i++) {
-      reqs.add(prepareData(i * pointNum, pointNum));
-      globalTime.addAndGet(pointNum);
-      int finalI = i;
       pool.submit(() -> {
-        TTransport tTransport = new TFastFramedTransport(new TSocket(args[0],
-            Integer.parseInt(args[1])));
-        TProtocol protocol = new TBinaryProtocol(tTransport);
-        Client client = new Client(protocol);
-        tTransport.open();
-        int cnt = 0;
-        while (true) {
-          if (addSync > 0) {
-            client.requestCommitId(0);
+        try {
+          if (useSyncClient) {
+            TTransport tTransport = new TFastFramedTransport(new TSocket(ip, port));
+            TProtocol protocol = new TBinaryProtocol(tTransport);
+            TestService.Client client = new TestService.Client(protocol);
+            tTransport.open();
+            int cnt = 0;
+            long lastBatchTime = System.currentTimeMillis();
+            while (true) {
+              if (addSync > 0) {
+                client.testRequest(ByteBuffer.allocate(0));
+              }
+              ByteBuffer allocate = ByteBuffer.allocate(loadSize);
+              allocate.limit(loadSize);
+              client.testRequest(allocate);
+              cnt ++;
+              //System.out.println(cnt);
+              if (cnt % (100000 / clientNum) == 0) {
+                int gc = globalCnt.addAndGet(100000 / clientNum);
+                long consumedTime = System.currentTimeMillis() - startTime;
+                long batchConsumedTime = System.currentTimeMillis() - lastBatchTime;
+                lastBatchTime = System.currentTimeMillis();
+                System.out.println(String.format("%d request complete, time %d, avg speed %f, "
+                        + "batch speed %f",
+                    gc, consumedTime, (double) gc / consumedTime,
+                    (double) (100000 / clientNum) / batchConsumedTime));
+              }
+            }
+          } else {
+            TestService.AsyncClient client =
+                new TestService.AsyncClient(new TBinaryProtocol.Factory(),
+                new TAsyncClientManager(), new TNonblockingSocket(ip, port));
+            int cnt = 0;
+            long lastBatchTime = System.currentTimeMillis();
+            while (true) {
+              if (addSync > 0) {
+                TestRequestHandler handler = new TestRequestHandler();
+                client.testRequest(ByteBuffer.allocate(0), handler);
+                handler.get();
+              }
+              TestRequestHandler handler = new TestRequestHandler();
+              ByteBuffer allocate = ByteBuffer.allocate(loadSize);
+              allocate.limit(loadSize);
+              client.testRequest(allocate, handler);
+              handler.get();
+              cnt ++;
+              //System.out.println(cnt);
+              if (cnt % (100000 / clientNum) == 0) {
+                int gc = globalCnt.addAndGet(100000 / clientNum);
+                long consumedTime = System.currentTimeMillis() - startTime;
+                long batchConsumedTime = System.currentTimeMillis() - lastBatchTime;
+                lastBatchTime = System.currentTimeMillis();
+                System.out.println(String.format("%d request complete, time %d, avg speed %f, "
+                        + "batch speed %f",
+                    gc, consumedTime, (double) gc / consumedTime,
+                    (double) (100000 / clientNum) / batchConsumedTime));
+              }
+            }
           }
-          client.insertRecords(finalReq(reqs.get(finalI), globalTime.getAndAdd(pointNum), pointNum));
-          cnt ++;
-          //System.out.println(cnt);
-          if (cnt % (100000 / clientNum) == 0) {
-            int gc = globalCnt.addAndGet(100000 / clientNum);
-            long consumedTime = System.currentTimeMillis() - startTime;
-            System.out.println(String.format("%d request complete, time %d, speed %f", gc,
-                consumedTime, (double) gc / consumedTime));
-          }
+        } catch (Exception e) {
+          e.printStackTrace();
         }
       });
     }

@@ -20,6 +20,10 @@ package org.apache.iotdb.db.service;
 
 import java.net.InetSocketAddress;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.SynchronousQueue;
+import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.atomic.AtomicLong;
 import org.apache.iotdb.db.concurrent.IoTDBThreadPoolFactory;
 import org.apache.iotdb.db.concurrent.ThreadName;
 import org.apache.iotdb.db.conf.IoTDBConfig;
@@ -29,12 +33,21 @@ import org.apache.iotdb.db.exception.StartupException;
 import org.apache.iotdb.db.exception.runtime.RPCServiceException;
 import org.apache.iotdb.service.rpc.thrift.TSIService;
 import org.apache.iotdb.service.rpc.thrift.TSIService.Processor;
+import org.apache.iotdb.service.rpc.thrift.TestService;
+import org.apache.iotdb.service.rpc.thrift.TestService.AsyncIface;
+import org.apache.iotdb.service.rpc.thrift.TestService.AsyncProcessor;
+import org.apache.iotdb.service.rpc.thrift.TestService.Iface;
 import org.apache.thrift.protocol.TBinaryProtocol;
 import org.apache.thrift.protocol.TCompactProtocol;
 import org.apache.thrift.protocol.TProtocolFactory;
+import org.apache.thrift.server.THsHaServer;
+import org.apache.thrift.server.THsHaServer.Args;
 import org.apache.thrift.server.TServer;
 import org.apache.thrift.server.TThreadPoolServer;
 import org.apache.thrift.transport.TFastFramedTransport;
+import org.apache.thrift.transport.TFastFramedTransport.Factory;
+import org.apache.thrift.transport.TNonblockingServerSocket;
+import org.apache.thrift.transport.TNonblockingServerTransport;
 import org.apache.thrift.transport.TServerSocket;
 import org.apache.thrift.transport.TTransportException;
 import org.slf4j.Logger;
@@ -54,6 +67,8 @@ public class RPCService implements RPCServiceMBean, IService {
   private RPCServiceThread rpcServiceThread;
   private TProtocolFactory protocolFactory;
   private Processor<TSIService.Iface> processor;
+  private TestService.Processor<Iface> testSyncProcessor;
+  private TestService.AsyncProcessor<AsyncIface> testAsyncProcessor;
   private TThreadPoolServer.Args poolArgs;
   private TSServiceImpl impl;
 
@@ -180,7 +195,11 @@ public class RPCService implements RPCServiceMBean, IService {
   private class RPCServiceThread extends Thread {
 
     private TServerSocket serverTransport;
+    private TServerSocket testServerSyncTransport;
+    private TNonblockingServerTransport testServerAsyncTransport;
     private TServer poolServer;
+    private TServer testSyncServer;
+    private TServer testAsyncServer;
     private CountDownLatch threadStopLatch;
 
     public RPCServiceThread(CountDownLatch threadStopLatch)
@@ -194,6 +213,8 @@ public class RPCService implements RPCServiceMBean, IService {
       IoTDBConfig config = IoTDBDescriptor.getInstance().getConfig();
       impl = (TSServiceImpl) Class.forName(config.getRpcImplClassName()).newInstance();
       processor = new TSIService.Processor<>(impl);
+      testAsyncProcessor = new AsyncProcessor<>(impl);
+      testSyncProcessor = new TestService.Processor<>(impl);
       this.threadStopLatch = threadStopLatch;
     }
 
@@ -203,6 +224,60 @@ public class RPCService implements RPCServiceMBean, IService {
       logger.info("The RPC service thread begin to run...");
       try {
         IoTDBConfig config = IoTDBDescriptor.getInstance().getConfig();
+        new Thread(() -> {
+          try {
+            testServerSyncTransport = new TServerSocket(new InetSocketAddress(config.getRpcAddress(),
+                config.getRpcPort() + 1));
+          } catch (TTransportException e) {
+            e.printStackTrace();
+          }
+          //this is for testing.
+          if (!testServerSyncTransport.getServerSocket().isBound()) {
+            logger.error("The RPC service port is not bound.");
+          }
+          TThreadPoolServer.Args syncServerArgs =
+              new TThreadPoolServer.Args(testServerSyncTransport).maxWorkerThreads(IoTDBDescriptor.
+                  getInstance().getConfig().getRpcMaxConcurrentClientNum()).minWorkerThreads(1)
+                  .stopTimeoutVal(
+                      IoTDBDescriptor.getInstance().getConfig().getThriftServerAwaitTimeForStopService());
+          syncServerArgs.executorService = IoTDBThreadPoolFactory.createThriftRpcClientThreadPool(syncServerArgs,
+              ThreadName.RPC_CLIENT.getName());
+          syncServerArgs.processor(testSyncProcessor);
+          syncServerArgs.protocolFactory(protocolFactory);
+          syncServerArgs.transportFactory(new Factory());
+          testSyncServer = new TThreadPoolServer(syncServerArgs);
+          testSyncServer.setServerEventHandler(new RPCServiceThriftHandler(impl));
+          testSyncServer.serve();
+        }).start();
+
+        new Thread(() -> {
+          try {
+            testServerAsyncTransport = new TNonblockingServerSocket(new InetSocketAddress(config.getRpcAddress(),
+                config.getRpcPort() + 2));
+          } catch (TTransportException e) {
+            e.printStackTrace();
+          }
+          Args asyncPoolArgs =
+              new Args(testServerAsyncTransport).maxWorkerThreads(IoTDBDescriptor.
+                  getInstance().getConfig().getRpcMaxConcurrentClientNum())
+                  .minWorkerThreads(1);
+          asyncPoolArgs.executorService(new ThreadPoolExecutor(asyncPoolArgs.minWorkerThreads,
+              asyncPoolArgs.maxWorkerThreads, asyncPoolArgs.getStopTimeoutVal(), asyncPoolArgs.getStopTimeoutUnit(),
+              new SynchronousQueue<>(), new ThreadFactory() {
+            private AtomicLong threadIndex = new AtomicLong(0);
+            @Override
+            public Thread newThread(Runnable r) {
+              return new Thread(r, "TestAsyncClient" + threadIndex.incrementAndGet());
+            }
+          }));
+          asyncPoolArgs.processor(testAsyncProcessor);
+          asyncPoolArgs.protocolFactory(protocolFactory);
+          asyncPoolArgs.transportFactory(new Factory());
+          testAsyncServer = new THsHaServer(asyncPoolArgs);
+          testAsyncServer.setServerEventHandler(new RPCServiceThriftHandler(impl));
+          testAsyncServer.serve();
+        }).start();
+
         serverTransport = new TServerSocket(new InetSocketAddress(config.getRpcAddress(),
             config.getRpcPort()));
         //this is for testing.
@@ -221,6 +296,7 @@ public class RPCService implements RPCServiceMBean, IService {
         poolServer = new TThreadPoolServer(poolArgs);
         poolServer.setServerEventHandler(new RPCServiceThriftHandler(impl));
         poolServer.serve();
+
       } catch (TTransportException e) {
         throw new RPCServiceException(String.format("%s: failed to start %s, because ", IoTDBConstant.GLOBAL_DB_NAME,
             getID().getName()), e);
