@@ -275,7 +275,7 @@ public class MManagerBasicTest {
 
   @Test
   public void testMaximalSeriesNumberAmongStorageGroup() throws MetadataException {
-    MManager manager = IoTDB.metaManager;
+    ISchemaManager manager = IoTDB.metaManager;
     assertEquals(0, manager.getMaximalSeriesNumberAmongStorageGroups());
     manager.setStorageGroup("root.laptop");
     assertEquals(0, manager.getMaximalSeriesNumberAmongStorageGroups());
@@ -329,7 +329,7 @@ public class MManagerBasicTest {
 
   @Test
   public void testGetDevicesWithGivenPrefix() {
-    MManager manager = IoTDB.metaManager;
+    ISchemaManager manager = IoTDB.metaManager;
 
     try {
       manager.setStorageGroup("root.laptop");
@@ -356,7 +356,7 @@ public class MManagerBasicTest {
 
   @Test
   public void testGetChildNodePathInNextLevel() {
-    MManager manager = IoTDB.metaManager;
+    ISchemaManager manager = IoTDB.metaManager;
     String[] res = new String[]{
         "[root.laptop, root.vehicle]",
         "[root.laptop.b1, root.laptop.b2]",

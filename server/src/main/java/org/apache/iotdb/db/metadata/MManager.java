@@ -90,7 +90,7 @@ import org.slf4j.LoggerFactory;
  * into files. This class contains all the interfaces to modify the metadata for delta system. All
  * the operations will be insert into the logs temporary in case the downtime of the delta system.
  */
-public class MManager {
+public class MManager implements ISchemaManager {
 
   private static final Logger logger = LoggerFactory.getLogger(MManager.class);
   private static final String TIME_SERIES_TREE_HEADER = "===  Timeseries Tree  ===\n\n";
@@ -191,6 +191,7 @@ public class MManager {
   }
 
   // Because the writer will be used later and should not be closed here.
+  @Override
   @SuppressWarnings("squid:S2093")
   public synchronized void init() {
     if (initialized) {
@@ -274,6 +275,7 @@ public class MManager {
   /**
    * function for clearing MTree
    */
+  @Override
   public void clear() {
     lock.writeLock().lock();
     try {
@@ -302,6 +304,7 @@ public class MManager {
     }
   }
 
+  @Override
   public void operation(String cmd) throws IOException, MetadataException {
     // see createTimeseries() to get the detailed format of the cmd
     String[] args = cmd.trim().split(",", -1);
@@ -362,11 +365,12 @@ public class MManager {
     }
   }
 
+  @Override
   public void createTimeseries(CreateTimeSeriesPlan plan) throws MetadataException {
     createTimeseries(plan, -1);
   }
 
-  public void createTimeseries(CreateTimeSeriesPlan plan, long offset) throws MetadataException {
+  private void createTimeseries(CreateTimeSeriesPlan plan, long offset) throws MetadataException {
     lock.writeLock().lock();
     String path = plan.getPath().getFullPath();
     try {
@@ -439,6 +443,7 @@ public class MManager {
    * @return whether the measurement occurs for the first time in this storage group (if true, the
    * measurement should be registered to the StorageEngine too)
    */
+  @Override
   public void createTimeseries(String path, TSDataType dataType, TSEncoding encoding,
       CompressionType compressor, Map<String, String> props) throws MetadataException {
     createTimeseries(
@@ -452,6 +457,7 @@ public class MManager {
    * @param prefixPath path to be deleted, could be root or a prefix path or a full path
    * @return The String is the deletion failed Timeseries
    */
+  @Override
   public String deleteTimeseries(String prefixPath) throws MetadataException {
     lock.writeLock().lock();
 
@@ -575,6 +581,7 @@ public class MManager {
    *
    * @param storageGroup root.node.(node)*
    */
+  @Override
   public void setStorageGroup(String storageGroup) throws MetadataException {
     lock.writeLock().lock();
     try {
@@ -603,6 +610,7 @@ public class MManager {
    *
    * @param storageGroups list of paths to be deleted. Format: root.node
    */
+  @Override
   public void deleteStorageGroups(List<String> storageGroups) throws MetadataException {
     lock.writeLock().lock();
     try {
@@ -662,6 +670,7 @@ public class MManager {
    *
    * @param path full path
    */
+  @Override
   public TSDataType getSeriesType(String path) throws MetadataException {
     lock.readLock().lock();
     try {
@@ -675,6 +684,7 @@ public class MManager {
     }
   }
 
+  @Override
   public MeasurementSchema[] getSchemas(String deviceId, String[] measurements)
       throws MetadataException {
     lock.readLock().lock();
@@ -701,6 +711,7 @@ public class MManager {
    *                   wildcard can only match one level, otherwise it can match to the tail.
    * @return A HashSet instance which stores devices names with given prefixPath.
    */
+  @Override
   public Set<String> getDevices(String prefixPath) throws MetadataException {
     lock.readLock().lock();
     try {
@@ -719,11 +730,12 @@ public class MManager {
    * @param nodeLevel  the level can not be smaller than the level of the prefixPath
    * @return A List instance which stores all node at given level
    */
+  @Override
   public List<String> getNodesList(String prefixPath, int nodeLevel) throws MetadataException {
     return getNodesList(prefixPath, nodeLevel, null);
   }
 
-  public List<String> getNodesList(String prefixPath, int nodeLevel, StorageGroupFilter filter)
+  private List<String> getNodesList(String prefixPath, int nodeLevel, StorageGroupFilter filter)
       throws MetadataException {
     lock.readLock().lock();
     try {
@@ -740,6 +752,7 @@ public class MManager {
    *
    * @return storage group in the given path
    */
+  @Override
   public String getStorageGroupName(String path) throws StorageGroupNotSetException {
     lock.readLock().lock();
     try {
@@ -752,6 +765,7 @@ public class MManager {
   /**
    * Get all storage group names
    */
+  @Override
   public List<String> getAllStorageGroupNames() {
     lock.readLock().lock();
     try {
@@ -764,6 +778,7 @@ public class MManager {
   /**
    * Get all storage group MNodes
    */
+  @Override
   public List<StorageGroupMNode> getAllStorageGroupNodes() {
     lock.readLock().lock();
     try {
@@ -780,6 +795,7 @@ public class MManager {
    * @param prefixPath can be a prefix or a full path. if the wildcard is not at the tail, then each
    *                   wildcard can only match one level, otherwise it can match to the tail.
    */
+  @Override
   public List<String> getAllTimeseriesName(String prefixPath) throws MetadataException {
     lock.readLock().lock();
     try {
@@ -793,6 +809,7 @@ public class MManager {
    * Similar to method getAllTimeseriesName(), but return Path instead of String in order to include
    * alias.
    */
+  @Override
   public List<Path> getAllTimeseriesPath(String prefixPath) throws MetadataException {
     lock.readLock().lock();
     try {
@@ -805,6 +822,7 @@ public class MManager {
   /**
    * To calculate the count of timeseries for given prefix path.
    */
+  @Override
   public int getAllTimeseriesCount(String prefixPath) throws MetadataException {
     lock.readLock().lock();
     try {
@@ -820,6 +838,7 @@ public class MManager {
    * @param prefixPath a prefix path or a full path, can not contain '*'
    * @param level      the level can not be smaller than the level of the prefixPath
    */
+  @Override
   public int getNodesCountInGivenLevel(String prefixPath, int level) throws MetadataException {
     lock.readLock().lock();
     try {
@@ -923,6 +942,7 @@ public class MManager {
     return true;
   }
 
+  @Override
   public List<ShowTimeSeriesResult> showTimeseries(ShowTimeSeriesPlan plan, QueryContext context)
       throws MetadataException {
     // show timeseries with index
@@ -975,6 +995,7 @@ public class MManager {
     }
   }
 
+  @Override
   public MeasurementSchema getSeriesSchema(String device, String measurement)
       throws MetadataException {
     lock.readLock().lock();
@@ -1001,6 +1022,7 @@ public class MManager {
    *
    * @return All child nodes' seriesPath(s) of given seriesPath.
    */
+  @Override
   public Set<String> getChildNodePathInNextLevel(String path) throws MetadataException {
     lock.readLock().lock();
     try {
@@ -1015,6 +1037,7 @@ public class MManager {
    *
    * @param path a full path or a prefix path
    */
+  @Override
   public boolean isPathExist(String path) {
     lock.readLock().lock();
     try {
@@ -1027,6 +1050,7 @@ public class MManager {
   /**
    * Get node by path
    */
+  @Override
   public MNode getNodeByPath(String path) throws MetadataException {
     lock.readLock().lock();
     try {
@@ -1040,6 +1064,7 @@ public class MManager {
    * Get storage group node by path. If storage group is not set, StorageGroupNotSetException will
    * be thrown
    */
+  @Override
   public StorageGroupMNode getStorageGroupNode(String path) throws MetadataException {
     lock.readLock().lock();
     try {
@@ -1057,6 +1082,7 @@ public class MManager {
    *
    * @param path path
    */
+  @Override
   public MNode getDeviceNodeWithAutoCreateAndReadLock(
       String path, boolean autoCreateSchema, int sgLevel) throws MetadataException {
     lock.readLock().lock();
@@ -1106,11 +1132,13 @@ public class MManager {
   /**
    * !!!!!!Attention!!!!! must call the return node's readUnlock() if you call this method.
    */
+  @Override
   public MNode getDeviceNodeWithAutoCreateAndReadLock(String path) throws MetadataException {
     return getDeviceNodeWithAutoCreateAndReadLock(
         path, config.isAutoCreateSchemaEnabled(), config.getDefaultStorageGroupLevel());
   }
 
+  @Override
   public MNode getDeviceNode(String path) throws MetadataException {
     lock.readLock().lock();
     MNode node;
@@ -1131,6 +1159,7 @@ public class MManager {
    * @param path read from disk
    * @return deviceId
    */
+  @Override
   public String getDeviceId(String path) {
     MNode deviceNode = null;
     try {
@@ -1142,6 +1171,7 @@ public class MManager {
     return path;
   }
 
+  @Override
   public MNode getChild(MNode parent, String child) {
     lock.readLock().lock();
     try {
@@ -1154,6 +1184,7 @@ public class MManager {
   /**
    * Get metadata in string
    */
+  @Override
   public String getMetadataInString() {
     lock.readLock().lock();
     try {
@@ -1163,15 +1194,18 @@ public class MManager {
     }
   }
 
+  @Override
   @TestOnly
   public void setMaxSeriesNumberAmongStorageGroup(long maxSeriesNumberAmongStorageGroup) {
     this.maxSeriesNumberAmongStorageGroup = maxSeriesNumberAmongStorageGroup;
   }
 
+  @Override
   public long getMaximalSeriesNumberAmongStorageGroups() {
     return maxSeriesNumberAmongStorageGroup;
   }
 
+  @Override
   public void setTTL(String storageGroup, long dataTTL) throws MetadataException, IOException {
     lock.writeLock().lock();
     try {
@@ -1189,6 +1223,7 @@ public class MManager {
    *
    * @return key-> storageGroupName, value->ttl
    */
+  @Override
   public Map<String, Long> getStorageGroupsTTL() {
     Map<String, Long> storageGroupsTTL = new HashMap<>();
     try {
@@ -1210,6 +1245,7 @@ public class MManager {
    * @param path   timeseries
    * @param offset offset in the tag file
    */
+  @Override
   public void changeOffset(String path, long offset) throws MetadataException {
     lock.writeLock().lock();
     try {
@@ -1219,6 +1255,7 @@ public class MManager {
     }
   }
 
+  @Override
   public void changeAlias(String path, String alias) throws MetadataException {
     lock.writeLock().lock();
     try {
@@ -1242,6 +1279,7 @@ public class MManager {
    * @param attributesMap newly added attributes map
    * @param fullPath      timeseries
    */
+  @Override
   public void upsertTagsAndAttributes(String alias, Map<String, String> tagsMap,
       Map<String, String> attributesMap, String fullPath) throws MetadataException, IOException {
     lock.writeLock().lock();
@@ -1345,6 +1383,7 @@ public class MManager {
    * @param attributesMap newly added attributes map
    * @param fullPath      timeseries
    */
+  @Override
   public void addAttributes(Map<String, String> attributesMap, String fullPath)
       throws MetadataException, IOException {
     lock.writeLock().lock();
@@ -1388,6 +1427,7 @@ public class MManager {
    * @param tagsMap  newly added tags map
    * @param fullPath timeseries
    */
+  @Override
   public void addTags(Map<String, String> tagsMap, String fullPath)
       throws MetadataException, IOException {
     lock.writeLock().lock();
@@ -1441,6 +1481,7 @@ public class MManager {
    * @param keySet   tags key or attributes key
    * @param fullPath timeseries path
    */
+  @Override
   public void dropTagsOrAttributes(Set<String> keySet, String fullPath)
       throws MetadataException, IOException {
     lock.writeLock().lock();
@@ -1512,6 +1553,7 @@ public class MManager {
    * @param alterMap the new tags or attributes key-value
    * @param fullPath timeseries
    */
+  @Override
   public void setTagsOrAttributesValue(Map<String, String> alterMap, String fullPath)
       throws MetadataException, IOException {
     lock.writeLock().lock();
@@ -1591,6 +1633,7 @@ public class MManager {
    * @param newKey   new key of tag or attribute
    * @param fullPath timeseries
    */
+  @Override
   public void renameTagOrAttributeKey(String oldKey, String newKey, String fullPath)
       throws MetadataException, IOException {
     lock.writeLock().lock();
@@ -1687,6 +1730,7 @@ public class MManager {
     }
   }
 
+  @Override
   public void collectTimeseriesSchema(MNode startingNode,
       Collection<TimeseriesSchema> timeseriesSchemas) {
     Deque<MNode> nodeDeque = new ArrayDeque<>();
@@ -1703,6 +1747,7 @@ public class MManager {
     }
   }
 
+  @Override
   public void collectMeasurementSchema(MNode startingNode,
       Collection<MeasurementSchema> timeseriesSchemas) {
     Deque<MNode> nodeDeque = new ArrayDeque<>();
@@ -1725,6 +1770,7 @@ public class MManager {
    * @param startingPath
    * @param measurementSchemas
    */
+  @Override
   public void collectSeries(String startingPath, List<MeasurementSchema> measurementSchemas) {
     MNode mNode;
     try {
@@ -1759,6 +1805,7 @@ public class MManager {
    * @param path can be a prefix or a full path.
    * @return StorageGroupName-FullPath pairs
    */
+  @Override
   public Map<String, String> determineStorageGroup(String path) throws IllegalPathException {
     lock.readLock().lock();
     try {
@@ -1782,10 +1829,12 @@ public class MManager {
    * if the path is in local mtree, nothing needed to do (because mtree is in the memory); Otherwise
    * cache the path to mRemoteSchemaCache
    */
+  @Override
   public void cacheMeta(String path, MeasurementMeta meta) {
     // do nothing
   }
 
+  @Override
   public void updateLastCache(String seriesPath, TimeValuePair timeValuePair,
       boolean highPriorityUpdate, Long latestFlushedTime,
       MeasurementMNode node) {
@@ -1801,6 +1850,7 @@ public class MManager {
     }
   }
 
+  @Override
   public TimeValuePair getLastCache(String seriesPath) {
     try {
       MeasurementMNode node = (MeasurementMNode) mtree.getNodeByPath(seriesPath);
@@ -1833,6 +1883,7 @@ public class MManager {
     }
   }
 
+  @Override
   public void createMTreeSnapshot() {
     lock.readLock().lock();
     long time = System.currentTimeMillis();
@@ -1868,6 +1919,7 @@ public class MManager {
    *
    * @throws MetadataException
    */
+  @Override
   public MeasurementSchema[] getSeriesSchemasAndReadLockDevice(String deviceId,
       String[] measurementList, InsertPlan plan) throws MetadataException {
     MeasurementSchema[] schemas = new MeasurementSchema[measurementList.length];
@@ -2001,6 +2053,7 @@ public class MManager {
    *
    * @param deviceId
    */
+  @Override
   public void unlockDeviceReadLock(String deviceId) {
     try {
       MNode mNode = getDeviceNode(deviceId);

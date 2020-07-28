@@ -28,7 +28,7 @@ import org.apache.iotdb.db.engine.StorageEngine;
 import org.apache.iotdb.db.exception.StartupException;
 import org.apache.iotdb.db.exception.StorageEngineException;
 import org.apache.iotdb.db.exception.metadata.MetadataException;
-import org.apache.iotdb.db.metadata.MManager;
+import org.apache.iotdb.db.metadata.ISchemaManager;
 import org.apache.iotdb.db.monitor.MonitorConstants.FileNodeManagerStatConstants;
 import org.apache.iotdb.db.monitor.MonitorConstants.FileNodeProcessorStatConstants;
 import org.apache.iotdb.db.monitor.collector.FileSize;
@@ -77,7 +77,7 @@ public class StatMonitor implements IService {
 
   private StatMonitor() {
     initTemporaryStatList();
-    MManager mmanager = IoTDB.metaManager;
+    ISchemaManager mmanager = IoTDB.metaManager;
     statisticMap = new HashMap<>();
     IoTDBConfig config = IoTDBDescriptor.getInstance().getConfig();
     statMonitorDetectFreqSec = config.getStatMonitorDetectFreqSec();
@@ -140,11 +140,11 @@ public class StatMonitor implements IService {
   }
 
   void registerStatStorageGroup() {
-    MManager mManager = IoTDB.metaManager;
+    ISchemaManager ISchemaManager = IoTDB.metaManager;
     String prefix = MonitorConstants.STAT_STORAGE_GROUP_PREFIX;
     try {
-      if (!mManager.isPathExist(prefix)) {
-        mManager.setStorageGroup(prefix);
+      if (!ISchemaManager.isPathExist(prefix)) {
+        ISchemaManager.setStorageGroup(prefix);
       }
     } catch (Exception e) {
       logger.error("MManager cannot set storage group to MTree.", e);
@@ -157,15 +157,15 @@ public class StatMonitor implements IService {
    * @param hashMap series path and data type pair, for example: [root.stat.file.size.DATA, INT64]
    */
   public synchronized void registerStatStorageGroup(Map<String, String> hashMap) {
-    MManager mManager = IoTDB.metaManager;
+    ISchemaManager ISchemaManager = IoTDB.metaManager;
     try {
       for (Map.Entry<String, String> entry : hashMap.entrySet()) {
         if (entry.getValue() == null) {
           logger.error("Registering metadata but data type of {} is null", entry.getKey());
         }
 
-        if (!mManager.isPathExist(entry.getKey())) {
-          mManager.createTimeseries(entry.getKey(), TSDataType.valueOf(entry.getValue()),
+        if (!ISchemaManager.isPathExist(entry.getKey())) {
+          ISchemaManager.createTimeseries(entry.getKey(), TSDataType.valueOf(entry.getValue()),
               TSEncoding.valueOf("RLE"),
               TSFileDescriptor.getInstance().getConfig().getCompressor(),
               Collections.emptyMap());

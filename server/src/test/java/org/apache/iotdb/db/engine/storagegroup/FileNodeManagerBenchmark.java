@@ -21,8 +21,8 @@ package org.apache.iotdb.db.engine.storagegroup;
 import org.apache.iotdb.db.engine.StorageEngine;
 import org.apache.iotdb.db.exception.StorageEngineException;
 import org.apache.iotdb.db.exception.metadata.MetadataException;
+import org.apache.iotdb.db.metadata.ISchemaManager;
 import org.apache.iotdb.db.qp.physical.crud.InsertRowPlan;
-import org.apache.iotdb.db.metadata.MManager;
 import org.apache.iotdb.db.service.IoTDB;
 import org.apache.iotdb.db.utils.EnvironmentUtils;
 import org.apache.iotdb.db.utils.RandomNum;
@@ -67,7 +67,7 @@ public class FileNodeManagerBenchmark {
 
   private static void prepare()
       throws MetadataException {
-    MManager manager = IoTDB.metaManager;
+    ISchemaManager manager = IoTDB.metaManager;
     manager.setStorageGroup(prefix);
     for (String device : devices) {
       for (String measurement : measurements) {

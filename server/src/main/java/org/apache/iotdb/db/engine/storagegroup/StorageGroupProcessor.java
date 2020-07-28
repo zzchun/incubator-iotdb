@@ -76,6 +76,7 @@ import org.apache.iotdb.db.exception.WriteProcessException;
 import org.apache.iotdb.db.exception.metadata.MetadataException;
 import org.apache.iotdb.db.exception.query.OutOfTTLException;
 import org.apache.iotdb.db.exception.query.QueryProcessException;
+import org.apache.iotdb.db.metadata.ISchemaManager;
 import org.apache.iotdb.db.metadata.MManager;
 import org.apache.iotdb.db.metadata.mnode.MNode;
 import org.apache.iotdb.db.metadata.mnode.MeasurementMNode;
@@ -1564,7 +1565,7 @@ public class StorageGroupProcessor {
       long endTime) throws WriteProcessException {
     MNode node = null;
     try {
-      MManager manager = MManager.getInstance();
+      ISchemaManager manager = MManager.getInstance();
       node = manager.getDeviceNodeWithAutoCreateAndReadLock(deviceId);
 
       MNode measurementNode = manager.getChild(node, measurementId);

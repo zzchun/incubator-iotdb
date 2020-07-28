@@ -41,7 +41,7 @@ import static org.junit.Assert.fail;
 
 public class MManagerAdvancedTest {
 
-  private static MManager mmanager = null;
+  private static ISchemaManager mmanager = null;
 
   @Before
   public void setUp() throws Exception {

@@ -28,7 +28,7 @@ import org.apache.iotdb.db.exception.DiskSpaceInsufficientException;
 import org.apache.iotdb.db.exception.StartupException;
 import org.apache.iotdb.db.exception.StorageEngineException;
 import org.apache.iotdb.db.exception.metadata.MetadataException;
-import org.apache.iotdb.db.metadata.MManager;
+import org.apache.iotdb.db.metadata.ISchemaManager;
 import org.apache.iotdb.db.service.IoTDB;
 import org.apache.iotdb.db.sync.conf.SyncConstant;
 import org.apache.iotdb.db.utils.EnvironmentUtils;
@@ -63,7 +63,7 @@ public class FileLoaderTest {
   }
 
   private void initMetadata() throws MetadataException {
-    MManager mmanager = IoTDB.metaManager;
+    ISchemaManager mmanager = IoTDB.metaManager;
     mmanager.init();
     mmanager.setStorageGroup("root.sg0");
     mmanager.setStorageGroup("root.sg1");

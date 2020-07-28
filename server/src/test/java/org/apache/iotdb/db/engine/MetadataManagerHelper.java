@@ -18,7 +18,7 @@
  */
 package org.apache.iotdb.db.engine;
 
-import org.apache.iotdb.db.metadata.MManager;
+import org.apache.iotdb.db.metadata.ISchemaManager;
 import org.apache.iotdb.db.service.IoTDB;
 import org.apache.iotdb.tsfile.common.conf.TSFileDescriptor;
 import org.apache.iotdb.tsfile.file.metadata.enums.CompressionType;
@@ -30,7 +30,7 @@ import java.util.Collections;
 public class MetadataManagerHelper {
 
   public static void initMetadata() {
-    MManager mmanager = IoTDB.metaManager;
+    ISchemaManager mmanager = IoTDB.metaManager;
     mmanager.init();
     try {
       mmanager.setStorageGroup("root.vehicle.d0");
