@@ -86,7 +86,7 @@ public class MeasurementMNode extends MNode implements IMeasurementMNode {
         cachedLastValuePair =
             new TimeValuePair(timeValuePair.getTimestamp(), timeValuePair.getValue());
       }
-    } else if (timeValuePair.getTimestamp() > cachedLastValuePair.getTimestamp()
+    } else if (timeValuePair.getTimestamp() >= cachedLastValuePair.getTimestamp()
         || (timeValuePair.getTimestamp() == cachedLastValuePair.getTimestamp()
         && highPriorityUpdate)) {
       cachedLastValuePair.setTimestamp(timeValuePair.getTimestamp());

@@ -466,18 +466,59 @@ public interface ISchemaManager {
    */
   Map<String, String> determineStorageGroup(String path) throws IllegalPathException;
 
+  /**
+   * cache a given time series schema
+   * @param path
+   * @param meta
+   */
   void cacheMeta(String path, MeasurementMeta meta);
 
+  /**
+   *
+   * @param seriesPath
+   * @param timeValuePair
+   * @param highPriorityUpdate
+   * @param latestFlushedTime
+   * @param node
+   */
   void updateLastCache(String seriesPath, TimeValuePair timeValuePair,
       boolean highPriorityUpdate, Long latestFlushedTime,
       IMeasurementMNode node);
 
+  /**
+   * get the lastest data point of the given time series
+   * @param seriesPath a full path
+   * @return
+   */
   TimeValuePair getLastCache(String seriesPath);
 
+  /**
+   * Create a schema snapshot.
+   * This is just for accerelating the speed of restarting IoTDB.
+   * If the init() is very fast, this method can be ignored.
+   */
   void createMTreeSnapshot();
 
+  /**
+   * 1. If the related time series are not registered, and the IoTDB instance allows auto-create-schema,
+   * then create related time series.
+   * 2. For those existing time series, check whether the data types in the insertPlan are correct.
+   * 2.1 if IoTDB enable partial insert, then call plan.markFailedMeasurementInsertion() to record
+   * which measurements have incorrect data type. Else throw MetadataException if there is error.
+   * 3. Getting the DeviceNode according to the deviceID, and assign it to the insertPlan
+   * 4. Apply for the readlock of the deviceNode.
+   * @param deviceId the device path, must be the same in the insertPlan
+   * @param measurementList the measurement names, must be the same in the isnertPlan
+   * @param plan
+   * @return the measurement schema of each measurement.
+   * @throws MetadataException
+   */
   MeasurementSchema[] getSeriesSchemasAndReadLockDevice(String deviceId,
       String[] measurementList, InsertPlan plan) throws MetadataException;
 
+  /**
+   * unlock the read lock of the given deviceId.
+   * @param deviceId
+   */
   void unlockDeviceReadLock(String deviceId);
 }
