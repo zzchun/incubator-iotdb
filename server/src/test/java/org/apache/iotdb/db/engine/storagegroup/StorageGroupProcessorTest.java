@@ -29,15 +29,14 @@ import java.util.concurrent.atomic.AtomicLong;
 import org.apache.iotdb.db.conf.adapter.ActiveTimeSeriesCounter;
 import org.apache.iotdb.db.constant.TestConstant;
 import org.apache.iotdb.db.engine.MetadataManagerHelper;
-import org.apache.iotdb.db.engine.StorageEngine;
 import org.apache.iotdb.db.engine.flush.TsFileFlushPolicy;
 import org.apache.iotdb.db.engine.merge.manage.MergeManager;
 import org.apache.iotdb.db.engine.querycontext.QueryDataSource;
 import org.apache.iotdb.db.engine.querycontext.ReadOnlyMemChunk;
-import org.apache.iotdb.db.exception.StorageEngineException;
 import org.apache.iotdb.db.exception.StorageGroupProcessorException;
 import org.apache.iotdb.db.exception.WriteProcessException;
 import org.apache.iotdb.db.exception.query.QueryProcessException;
+import org.apache.iotdb.db.metadata.mnode.ISchemaNode;
 import org.apache.iotdb.db.metadata.mnode.MNode;
 import org.apache.iotdb.db.metadata.mnode.MeasurementMNode;
 import org.apache.iotdb.db.qp.physical.crud.InsertRowPlan;
@@ -65,7 +64,7 @@ public class StorageGroupProcessorTest {
   private StorageGroupProcessor processor;
   private QueryContext context = EnvironmentUtils.TEST_QUERY_CONTEXT;
   private AtomicLong mergeLock;
-  private MNode deviceMNode = null;
+  private ISchemaNode deviceMNode = null;
 
   @Before
   public void setUp() throws Exception {
@@ -180,7 +179,7 @@ public class StorageGroupProcessorTest {
     schemas[0] = new MeasurementSchema("s0", TSDataType.INT32, TSEncoding.PLAIN);
     schemas[1] = new MeasurementSchema("s1", TSDataType.INT64, TSEncoding.PLAIN);
 
-    MNode deviceMNode = new MNode(null, deviceId);
+    ISchemaNode deviceMNode = new MNode(null, deviceId);
     deviceMNode.addChild("s0", new MeasurementMNode(null, null, null, null));
     deviceMNode.addChild("s1", new MeasurementMNode(null, null, null, null));
 

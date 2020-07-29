@@ -36,6 +36,7 @@ import org.apache.iotdb.db.exception.metadata.MetadataException;
 import org.apache.iotdb.db.exception.metadata.StorageGroupNotSetException;
 import org.apache.iotdb.db.exception.query.QueryProcessException;
 import org.apache.iotdb.db.exception.runtime.StorageEngineFailureException;
+import org.apache.iotdb.db.metadata.mnode.IStorageGroupMNode;
 import org.apache.iotdb.db.metadata.mnode.StorageGroupMNode;
 import org.apache.iotdb.db.qp.physical.crud.InsertRowPlan;
 import org.apache.iotdb.db.qp.physical.crud.InsertTabletPlan;
@@ -154,9 +155,9 @@ public class StorageEngine implements IService {
     /*
      * recover all storage group processors.
      */
-    List<StorageGroupMNode> sgNodes = IoTDB.metaManager.getAllStorageGroupNodes();
+    List<IStorageGroupMNode> sgNodes = IoTDB.metaManager.getAllStorageGroupNodes();
     List<Future> futures = new ArrayList<>();
-    for (StorageGroupMNode storageGroup : sgNodes) {
+    for (IStorageGroupMNode storageGroup : sgNodes) {
       futures.add(recoveryThreadPool.submit((Callable<Void>) () -> {
         try {
           StorageGroupProcessor processor = new StorageGroupProcessor(systemDir,
@@ -285,7 +286,7 @@ public class StorageEngine implements IService {
               logger.info("construct a processor instance, the storage group is {}, Thread is {}",
                 storageGroupName, Thread.currentThread().getId());
               processor = new StorageGroupProcessor(systemDir, storageGroupName, fileFlushPolicy);
-              StorageGroupMNode storageGroup = IoTDB.metaManager
+              IStorageGroupMNode storageGroup = IoTDB.metaManager
                 .getStorageGroupNode(storageGroupName);
               processor.setDataTTL(storageGroup.getDataTTL());
               processorMap.put(storageGroupName, processor);

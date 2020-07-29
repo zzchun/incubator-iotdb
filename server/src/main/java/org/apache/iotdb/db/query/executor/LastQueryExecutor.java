@@ -25,7 +25,7 @@ import org.apache.iotdb.db.engine.storagegroup.TsFileResource;
 import org.apache.iotdb.db.exception.StorageEngineException;
 import org.apache.iotdb.db.exception.metadata.MetadataException;
 import org.apache.iotdb.db.exception.query.QueryProcessException;
-import org.apache.iotdb.db.metadata.mnode.MeasurementMNode;
+import org.apache.iotdb.db.metadata.mnode.IMeasurementMNode;
 import org.apache.iotdb.db.qp.physical.crud.LastQueryPlan;
 import org.apache.iotdb.db.query.context.QueryContext;
 import org.apache.iotdb.db.query.control.QueryResourceManager;
@@ -121,9 +121,9 @@ public class LastQueryExecutor {
       throws IOException, QueryProcessException, StorageEngineException {
 
     // Retrieve last value from MNode
-    MeasurementMNode node = null;
+    IMeasurementMNode node = null;
     try {
-      node = (MeasurementMNode) IoTDB.metaManager.getNodeByPath(seriesPath.toString());
+      node = (IMeasurementMNode) IoTDB.metaManager.getNodeByPath(seriesPath.toString());
     } catch (MetadataException e) {
       TimeValuePair timeValuePair = IoTDB.metaManager.getLastCache(seriesPath.getFullPath());
       if (timeValuePair != null) {

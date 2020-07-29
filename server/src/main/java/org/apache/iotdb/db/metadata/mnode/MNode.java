@@ -29,6 +29,7 @@ import java.util.Map.Entry;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
+import java.util.concurrent.locks.ReentrantReadWriteLock.WriteLock;
 import org.apache.iotdb.db.conf.IoTDBConstant;
 import org.apache.iotdb.db.exception.metadata.DeleteFailedException;
 import org.apache.iotdb.db.metadata.MetadataConstant;
@@ -37,7 +38,7 @@ import org.apache.iotdb.db.metadata.MetadataConstant;
  * This class is the implementation of Metadata Node. One MNode instance represents one node in the
  * Metadata Tree
  */
-public class MNode implements Serializable {
+public class MNode implements Serializable, ISchemaNode {
 
   private static final long serialVersionUID = -770028375899514063L;
 
@@ -46,22 +47,22 @@ public class MNode implements Serializable {
    */
   protected String name;
 
-  protected MNode parent;
+  protected ISchemaNode parent;
 
   /**
    * from root to this node, only be set when used once for InternalMNode
    */
   protected String fullPath;
 
-  transient Map<String, MNode> children;
-  transient Map<String, MNode> aliasChildren;
+  transient Map<String, ISchemaNode> children;
+  transient Map<String, ISchemaNode> aliasChildren;
 
   protected transient ReadWriteLock lock = new ReentrantReadWriteLock();
 
   /**
    * Constructor of MNode.
    */
-  public MNode(MNode parent, String name) {
+  public MNode(ISchemaNode parent, String name) {
     this.parent = parent;
     this.name = name;
   }
@@ -69,6 +70,7 @@ public class MNode implements Serializable {
   /**
    * check whether the MNode has a child with the name
    */
+  @Override
   public boolean hasChild(String name) {
     return (children != null && children.containsKey(name)) ||
         (aliasChildren != null && aliasChildren.containsKey(name));
@@ -77,7 +79,8 @@ public class MNode implements Serializable {
   /**
    * node key, name or alias
    */
-  public void addChild(String name, MNode child) {
+  @Override
+  public void addChild(String name, ISchemaNode child) {
     if (children == null) {
       children = new LinkedHashMap<>();
     }
@@ -87,10 +90,11 @@ public class MNode implements Serializable {
   /**
    * delete a child
    */
+  @Override
   public void deleteChild(String name) throws DeleteFailedException {
     if (children != null && children.containsKey(name)) {
       // acquire the write lock of its child node.
-      Lock writeLock = (children.get(name)).lock.writeLock();
+      Lock writeLock = (children.get(name)).getWriteLock();
       if (writeLock.tryLock()) {
         children.remove(name);
         writeLock.unlock();
@@ -103,6 +107,7 @@ public class MNode implements Serializable {
   /**
    * delete the alias of a child
    */
+  @Override
   public void deleteAliasChild(String alias) throws DeleteFailedException {
     if (aliasChildren == null) {
       return;
@@ -118,8 +123,9 @@ public class MNode implements Serializable {
   /**
    * get the child with the name
    */
-  public MNode getChild(String name) {
-    MNode child = null;
+  @Override
+  public ISchemaNode getChild(String name) {
+    ISchemaNode child = null;
     if (children != null) {
       child = children.get(name);
     }
@@ -132,12 +138,13 @@ public class MNode implements Serializable {
   /**
    * get the count of all leaves whose ancestor is current node
    */
+  @Override
   public int getLeafCount() {
     if (children == null) {
       return 0;
     }
     int leafCount = 0;
-    for (MNode child : children.values()) {
+    for (ISchemaNode child : children.values()) {
       leafCount += child.getLeafCount();
     }
     return leafCount;
@@ -146,7 +153,8 @@ public class MNode implements Serializable {
   /**
    * add an alias
    */
-  public void addAlias(String alias, MNode child) {
+  @Override
+  public void addAlias(String alias, ISchemaNode child) {
     if (aliasChildren == null) {
       aliasChildren = new LinkedHashMap<>();
     }
@@ -156,6 +164,7 @@ public class MNode implements Serializable {
   /**
    * get full path
    */
+  @Override
   public String getFullPath() {
     if (fullPath != null) {
       return fullPath;
@@ -166,10 +175,10 @@ public class MNode implements Serializable {
 
   String concatFullPath() {
     StringBuilder builder = new StringBuilder(name);
-    MNode curr = this;
+    ISchemaNode curr = this;
     while (curr.getParent() != null) {
       curr = curr.getParent();
-      builder.insert(0, IoTDBConstant.PATH_SEPARATOR).insert(0, curr.name);
+      builder.insert(0, IoTDBConstant.PATH_SEPARATOR).insert(0, curr.getName());
     }
     return builder.toString();
   }
@@ -179,33 +188,40 @@ public class MNode implements Serializable {
     return this.getName();
   }
 
-  public MNode getParent() {
+  @Override
+  public ISchemaNode getParent() {
     return parent;
   }
 
-  public void setParent(MNode parent) {
+  @Override
+  public void setParent(ISchemaNode parent) {
     this.parent = parent;
   }
 
-  public Map<String, MNode> getChildren() {
+  @Override
+  public Map<String, ISchemaNode> getChildren() {
     if (children == null) {
       return new LinkedHashMap<>();
     }
     return children;
   }
 
+  @Override
   public String getName() {
     return name;
   }
 
+  @Override
   public void setName(String name) {
     this.name = name;
   }
 
-  public void setChildren(Map<String, MNode> children) {
+  @Override
+  public void setChildren(Map<String, ISchemaNode> children) {
     this.children = children;
   }
 
+  @Override
   public void serializeTo(BufferedWriter bw) throws IOException {
     serializeChildren(bw);
 
@@ -220,24 +236,36 @@ public class MNode implements Serializable {
     if (children == null) {
       return;
     }
-    for (Entry<String, MNode> entry : children.entrySet()) {
+    for (Entry<String, ISchemaNode> entry : children.entrySet()) {
       entry.getValue().serializeTo(bw);
     }
   }
 
+  @Override
   public void readLock() {
-    MNode node = this;
+    ISchemaNode node = this;
     while (node != null) {
-      node.lock.readLock().lock();
-      node = node.parent;
+      node.getReadLock().lock();
+      node = node.getParent();
     }
   }
 
+  @Override
   public void readUnlock() {
-    MNode node = this;
+    ISchemaNode node = this;
     while (node != null) {
-      node.lock.readLock().unlock();
-      node = node.parent;
+      node.getReadLock().unlock();
+      node = node.getParent();
     }
+  }
+
+  @Override
+  public Lock getWriteLock() {
+    return lock.writeLock();
+  }
+
+  @Override
+  public Lock getReadLock() {
+    return lock.readLock();
   }
 }

@@ -78,8 +78,8 @@ import org.apache.iotdb.db.exception.query.OutOfTTLException;
 import org.apache.iotdb.db.exception.query.QueryProcessException;
 import org.apache.iotdb.db.metadata.ISchemaManager;
 import org.apache.iotdb.db.metadata.MManager;
-import org.apache.iotdb.db.metadata.mnode.MNode;
-import org.apache.iotdb.db.metadata.mnode.MeasurementMNode;
+import org.apache.iotdb.db.metadata.mnode.IMeasurementMNode;
+import org.apache.iotdb.db.metadata.mnode.ISchemaNode;
 import org.apache.iotdb.db.qp.physical.crud.DeletePlan;
 import org.apache.iotdb.db.qp.physical.crud.InsertRowPlan;
 import org.apache.iotdb.db.qp.physical.crud.InsertTabletPlan;
@@ -894,16 +894,16 @@ public class StorageGroupProcessor {
   }
 
   private void tryToUpdateBatchInsertLastCache(InsertTabletPlan plan, Long latestFlushedTime) {
-    MNode node = plan.getDeviceMNode();
+    ISchemaNode node = plan.getDeviceMNode();
     String[] measurementList = plan.getMeasurements();
     for (int i = 0; i < measurementList.length; i++) {
       if (plan.getColumns()[i] == null) {
         continue;
       }
       // Update cached last value with high priority
-      MeasurementMNode tmpMeasurementNode = null;
+      IMeasurementMNode tmpMeasurementNode = null;
       if (node != null) {
-        tmpMeasurementNode = (MeasurementMNode) node.getChild(measurementList[i]);
+        tmpMeasurementNode = (IMeasurementMNode) node.getChild(measurementList[i]);
       }
       if (tmpMeasurementNode != null) {
         // just for performance, because in single node version, we do not need the full path of measurement
@@ -950,16 +950,16 @@ public class StorageGroupProcessor {
   }
 
   private void tryToUpdateInsertLastCache(InsertRowPlan plan, Long latestFlushedTime) {
-    MNode node = plan.getDeviceMNode();
+    ISchemaNode node = plan.getDeviceMNode();
     String[] measurementList = plan.getMeasurements();
     for (int i = 0; i < measurementList.length; i++) {
       if (plan.getValues()[i] == null) {
         continue;
       }
       // Update cached last value with high priority
-      MeasurementMNode tmpMeasurementNode = null;
+      IMeasurementMNode tmpMeasurementNode = null;
       if (node != null) {
-        tmpMeasurementNode = (MeasurementMNode) node.getChild(measurementList[i]);
+        tmpMeasurementNode = (IMeasurementMNode) node.getChild(measurementList[i]);
       }
       if (tmpMeasurementNode != null) {
         // just for performance, because in single node version, we do not need the full path of measurement
@@ -1563,17 +1563,17 @@ public class StorageGroupProcessor {
 
   private void tryToDeleteLastCache(String deviceId, String measurementId, long startTime,
       long endTime) throws WriteProcessException {
-    MNode node = null;
+    ISchemaNode node = null;
     try {
       ISchemaManager manager = MManager.getInstance();
       node = manager.getDeviceNodeWithAutoCreateAndReadLock(deviceId);
 
-      MNode measurementNode = manager.getChild(node, measurementId);
+      ISchemaNode measurementNode = manager.getChild(node, measurementId);
       if (measurementNode != null) {
-        TimeValuePair lastPair = ((MeasurementMNode) measurementNode).getCachedLast();
+        TimeValuePair lastPair = ((IMeasurementMNode) measurementNode).getCachedLast();
         if (lastPair != null && startTime <= lastPair.getTimestamp()
             && lastPair.getTimestamp() <= endTime) {
-          ((MeasurementMNode) measurementNode).resetCache();
+          ((IMeasurementMNode) measurementNode).resetCache();
         }
       }
     } catch (MetadataException e) {

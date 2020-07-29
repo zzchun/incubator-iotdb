@@ -23,6 +23,7 @@ import org.apache.iotdb.db.engine.StorageEngine;
 import org.apache.iotdb.db.exception.StorageEngineException;
 import org.apache.iotdb.db.exception.metadata.MetadataException;
 import org.apache.iotdb.db.exception.query.QueryProcessException;
+import org.apache.iotdb.db.metadata.mnode.ISchemaNode;
 import org.apache.iotdb.db.metadata.mnode.MNode;
 import org.apache.iotdb.db.metadata.mnode.MeasurementMNode;
 import org.apache.iotdb.db.qp.physical.crud.InsertRowPlan;
@@ -57,7 +58,7 @@ public class DeletionQueryTest {
   private TSDataType dataType = TSDataType.DOUBLE;
   private TSEncoding encoding = TSEncoding.PLAIN;
   private QueryRouter router = new QueryRouter();
-  private MNode deviceMNode = null;
+  private ISchemaNode deviceMNode = null;
 
   static {
     for (int i = 0; i < 10; i++) {

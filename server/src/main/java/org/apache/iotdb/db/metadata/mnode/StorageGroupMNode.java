@@ -22,7 +22,7 @@ import java.io.BufferedWriter;
 import java.io.IOException;
 import org.apache.iotdb.db.metadata.MetadataConstant;
 
-public class StorageGroupMNode extends MNode {
+public class StorageGroupMNode extends MNode implements IStorageGroupMNode {
 
   private static final long serialVersionUID = 7999036474525817732L;
 
@@ -32,15 +32,17 @@ public class StorageGroupMNode extends MNode {
    */
   private long dataTTL;
 
-  public StorageGroupMNode(MNode parent, String name, long dataTTL) {
+  public StorageGroupMNode(ISchemaNode parent, String name, long dataTTL) {
     super(parent, name);
     this.dataTTL = dataTTL;
   }
 
+  @Override
   public long getDataTTL() {
     return dataTTL;
   }
 
+  @Override
   public void setDataTTL(long dataTTL) {
     this.dataTTL = dataTTL;
   }
@@ -57,7 +59,4 @@ public class StorageGroupMNode extends MNode {
     bw.newLine();
   }
 
-  public static StorageGroupMNode deserializeFrom(String[] nodeInfo) {
-    return new StorageGroupMNode(null, nodeInfo[1], Long.valueOf(nodeInfo[2]));
-  }
 }

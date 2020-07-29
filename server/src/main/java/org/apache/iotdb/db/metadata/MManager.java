@@ -56,9 +56,10 @@ import org.apache.iotdb.db.exception.metadata.MetadataException;
 import org.apache.iotdb.db.exception.metadata.PathNotExistException;
 import org.apache.iotdb.db.exception.metadata.StorageGroupAlreadySetException;
 import org.apache.iotdb.db.exception.metadata.StorageGroupNotSetException;
-import org.apache.iotdb.db.metadata.mnode.MNode;
+import org.apache.iotdb.db.metadata.mnode.IMeasurementMNode;
+import org.apache.iotdb.db.metadata.mnode.ISchemaNode;
+import org.apache.iotdb.db.metadata.mnode.IStorageGroupMNode;
 import org.apache.iotdb.db.metadata.mnode.MeasurementMNode;
-import org.apache.iotdb.db.metadata.mnode.StorageGroupMNode;
 import org.apache.iotdb.db.monitor.MonitorConstants;
 import org.apache.iotdb.db.qp.constant.SQLConstant;
 import org.apache.iotdb.db.qp.physical.crud.InsertPlan;
@@ -111,10 +112,10 @@ public class MManager implements ISchemaManager {
   private TagLogFile tagLogFile;
   private boolean isRecovering;
   // device -> DeviceMNode
-  private RandomDeleteCache<String, MNode> mNodeCache;
+  private RandomDeleteCache<String, ISchemaNode> mNodeCache;
 
   // tag key -> tag value -> LeafMNode
-  private Map<String, Map<String, Set<MeasurementMNode>>> tagIndex = new HashMap<>();
+  private Map<String, Map<String, Set<IMeasurementMNode>>> tagIndex = new HashMap<>();
 
   // storage group name -> the series number
   private Map<String, Integer> seriesNumberInStorageGroups = new HashMap<>();
@@ -157,10 +158,10 @@ public class MManager implements ISchemaManager {
     isRecovering = true;
 
     int cacheSize = config.getmManagerCacheSize();
-    mNodeCache = new RandomDeleteCache<String, MNode>(cacheSize) {
+    mNodeCache = new RandomDeleteCache<String, ISchemaNode>(cacheSize) {
 
       @Override
-      public MNode loadObjectByKey(String key) throws CacheException {
+      public ISchemaNode loadObjectByKey(String key) throws CacheException {
         lock.readLock().lock();
         try {
           return mtree.getNodeByPathWithStorageGroupCheck(key);
@@ -208,7 +209,7 @@ public class MManager implements ISchemaManager {
       if (config.isEnableParameterAdapter()) {
         List<String> storageGroups = mtree.getAllStorageGroupNames();
         for (String sg : storageGroups) {
-          MNode node = mtree.getNodeByPath(sg);
+          ISchemaNode node = mtree.getNodeByPath(sg);
           seriesNumberInStorageGroups.put(sg, node.getLeafCount());
         }
         maxSeriesNumberAmongStorageGroup =
@@ -393,7 +394,7 @@ public class MManager implements ISchemaManager {
       IoTDBConfigDynamicAdapter.getInstance().addOrDeleteTimeSeries(1);
 
       // create time series in MTree
-      MeasurementMNode leafMNode = mtree
+      IMeasurementMNode leafMNode = mtree
           .createTimeseries(path, plan.getDataType(), plan.getEncoding(), plan.getCompressor(),
               plan.getProps(), plan.getAlias());
 
@@ -505,7 +506,7 @@ public class MManager implements ISchemaManager {
   /**
    * remove the node from the tag inverted index
    */
-  private void removeFromTagInvertedIndex(MeasurementMNode node) throws IOException {
+  private void removeFromTagInvertedIndex(IMeasurementMNode node) throws IOException {
     if (node.getOffset() < 0) {
       return;
     }
@@ -549,7 +550,7 @@ public class MManager implements ISchemaManager {
       throws MetadataException, IOException {
     lock.writeLock().lock();
     try {
-      Pair<String, MeasurementMNode> pair = mtree.deleteTimeseriesAndReturnEmptyStorageGroup(path);
+      Pair<String, IMeasurementMNode> pair = mtree.deleteTimeseriesAndReturnEmptyStorageGroup(path);
       removeFromTagInvertedIndex(pair.right);
       String storageGroupName = pair.left;
 
@@ -620,8 +621,8 @@ public class MManager implements ISchemaManager {
         mNodeCache.clear();
 
         // try to delete storage group
-        List<MeasurementMNode> leafMNodes = mtree.deleteStorageGroup(storageGroup);
-        for (MeasurementMNode leafMNode : leafMNodes) {
+        List<IMeasurementMNode> leafMNodes = mtree.deleteStorageGroup(storageGroup);
+        for (IMeasurementMNode leafMNode : leafMNodes) {
           removeFromTagInvertedIndex(leafMNode);
         }
 
@@ -689,13 +690,13 @@ public class MManager implements ISchemaManager {
       throws MetadataException {
     lock.readLock().lock();
     try {
-      MNode deviceNode = getNodeByPath(deviceId);
+      ISchemaNode deviceNode = getNodeByPath(deviceId);
       MeasurementSchema[] measurementSchemas = new MeasurementSchema[measurements.length];
       for (int i = 0; i < measurementSchemas.length; i++) {
         if (!deviceNode.hasChild(measurements[i])) {
           throw new MetadataException(measurements[i] + " does not exist in " + deviceId);
         }
-        measurementSchemas[i] = ((MeasurementMNode) deviceNode.getChild(measurements[i]))
+        measurementSchemas[i] = ((IMeasurementMNode) deviceNode.getChild(measurements[i]))
             .getSchema();
       }
       return measurementSchemas;
@@ -779,7 +780,7 @@ public class MManager implements ISchemaManager {
    * Get all storage group MNodes
    */
   @Override
-  public List<StorageGroupMNode> getAllStorageGroupNodes() {
+  public List<IStorageGroupMNode> getAllStorageGroupNodes() {
     lock.readLock().lock();
     try {
       return mtree.getAllStorageGroupNodes();
@@ -855,21 +856,21 @@ public class MManager implements ISchemaManager {
       if (!tagIndex.containsKey(plan.getKey())) {
         throw new MetadataException("The key " + plan.getKey() + " is not a tag.");
       }
-      Map<String, Set<MeasurementMNode>> value2Node = tagIndex.get(plan.getKey());
+      Map<String, Set<IMeasurementMNode>> value2Node = tagIndex.get(plan.getKey());
       if (value2Node.isEmpty()) {
         throw new MetadataException("The key " + plan.getKey() + " is not a tag.");
       }
 
-      List<MeasurementMNode> allMatchedNodes = new ArrayList<>();
+      List<IMeasurementMNode> allMatchedNodes = new ArrayList<>();
       if (plan.isContains()) {
-        for (Entry<String, Set<MeasurementMNode>> entry : value2Node.entrySet()) {
+        for (Entry<String, Set<IMeasurementMNode>> entry : value2Node.entrySet()) {
           String tagValue = entry.getKey();
           if (tagValue.contains(plan.getValue())) {
             allMatchedNodes.addAll(entry.getValue());
           }
         }
       } else {
-        for (Entry<String, Set<MeasurementMNode>> entry : value2Node.entrySet()) {
+        for (Entry<String, Set<IMeasurementMNode>> entry : value2Node.entrySet()) {
           String tagValue = entry.getKey();
           if (plan.getValue().equals(tagValue)) {
             allMatchedNodes.addAll(entry.getValue());
@@ -880,11 +881,11 @@ public class MManager implements ISchemaManager {
       // if ordered by heat, we sort all the timeseries by the descending order of the last insert timestamp
       if (plan.isOrderByHeat()) {
         allMatchedNodes = allMatchedNodes.stream().sorted(Comparator
-            .comparingLong((MeasurementMNode mNode) -> MTree.getLastTimeStamp(mNode, context))
-            .reversed().thenComparing(MNode::getFullPath)).collect(toList());
+            .comparingLong((IMeasurementMNode mNode) -> MTree.getLastTimeStamp(mNode, context))
+            .reversed().thenComparing(ISchemaNode::getFullPath)).collect(toList());
       } else {
         // otherwise, we just sort them by the alphabetical order
-        allMatchedNodes = allMatchedNodes.stream().sorted(Comparator.comparing(MNode::getFullPath))
+        allMatchedNodes = allMatchedNodes.stream().sorted(Comparator.comparing(ISchemaNode::getFullPath))
             .collect(toList());
       }
 
@@ -894,7 +895,7 @@ public class MManager implements ISchemaManager {
       int count = 0;
       int limit = plan.getLimit();
       int offset = plan.getOffset();
-      for (MeasurementMNode leaf : allMatchedNodes) {
+      for (IMeasurementMNode leaf : allMatchedNodes) {
         if (match(leaf.getFullPath(), prefixNodes)) {
           if (limit != 0 || offset != 0) {
             curOffset++;
@@ -1000,10 +1001,10 @@ public class MManager implements ISchemaManager {
       throws MetadataException {
     lock.readLock().lock();
     try {
-      MNode node = mtree.getNodeByPath(device);
-      MNode leaf = node.getChild(measurement);
+      ISchemaNode node = mtree.getNodeByPath(device);
+      ISchemaNode leaf = node.getChild(measurement);
       if (leaf != null) {
-        return ((MeasurementMNode) leaf).getSchema();
+        return ((IMeasurementMNode) leaf).getSchema();
       }
       return null;
     } catch (PathNotExistException | IllegalPathException e) {
@@ -1051,7 +1052,7 @@ public class MManager implements ISchemaManager {
    * Get node by path
    */
   @Override
-  public MNode getNodeByPath(String path) throws MetadataException {
+  public ISchemaNode getNodeByPath(String path) throws MetadataException {
     lock.readLock().lock();
     try {
       return mtree.getNodeByPath(path);
@@ -1065,7 +1066,7 @@ public class MManager implements ISchemaManager {
    * be thrown
    */
   @Override
-  public StorageGroupMNode getStorageGroupNode(String path) throws MetadataException {
+  public IStorageGroupMNode getStorageGroupNode(String path) throws MetadataException {
     lock.readLock().lock();
     try {
       return mtree.getStorageGroupNode(path);
@@ -1083,11 +1084,12 @@ public class MManager implements ISchemaManager {
    * @param path path
    */
   @Override
-  public MNode getDeviceNodeWithAutoCreateAndReadLock(
+  public ISchemaNode getDeviceNodeWithAutoCreateAndReadLock(
       String path, boolean autoCreateSchema, int sgLevel) throws MetadataException {
     lock.readLock().lock();
-    MNode node = null;
+    ISchemaNode node = null;
     boolean shouldSetStorageGroup;
+    // if the node exists, then get its read lock and return directly.
     try {
       node = mNodeCache.get(path);
       return node;
@@ -1102,7 +1104,9 @@ public class MManager implements ISchemaManager {
       lock.readLock().unlock();
     }
 
+    // if the node does not exist, try to create it.
     lock.writeLock().lock();
+    // to avoid concurrent problem, we have to double check after getting the write lock.
     try {
       try {
         node = mNodeCache.get(path);
@@ -1133,15 +1137,15 @@ public class MManager implements ISchemaManager {
    * !!!!!!Attention!!!!! must call the return node's readUnlock() if you call this method.
    */
   @Override
-  public MNode getDeviceNodeWithAutoCreateAndReadLock(String path) throws MetadataException {
+  public ISchemaNode getDeviceNodeWithAutoCreateAndReadLock(String path) throws MetadataException {
     return getDeviceNodeWithAutoCreateAndReadLock(
         path, config.isAutoCreateSchemaEnabled(), config.getDefaultStorageGroupLevel());
   }
 
   @Override
-  public MNode getDeviceNode(String path) throws MetadataException {
+  public ISchemaNode getDeviceNode(String path) throws MetadataException {
     lock.readLock().lock();
-    MNode node;
+    ISchemaNode node;
     try {
       node = mNodeCache.get(path);
       return node;
@@ -1161,7 +1165,7 @@ public class MManager implements ISchemaManager {
    */
   @Override
   public String getDeviceId(String path) {
-    MNode deviceNode = null;
+    ISchemaNode deviceNode = null;
     try {
       deviceNode = getDeviceNode(path);
       path = deviceNode.getFullPath();
@@ -1172,7 +1176,7 @@ public class MManager implements ISchemaManager {
   }
 
   @Override
-  public MNode getChild(MNode parent, String child) {
+  public ISchemaNode getChild(ISchemaNode parent, String child) {
     lock.readLock().lock();
     try {
       return parent.getChild(child);
@@ -1245,18 +1249,16 @@ public class MManager implements ISchemaManager {
    * @param path   timeseries
    * @param offset offset in the tag file
    */
-  @Override
-  public void changeOffset(String path, long offset) throws MetadataException {
+  private void changeOffset(String path, long offset) throws MetadataException {
     lock.writeLock().lock();
     try {
-      ((MeasurementMNode) mtree.getNodeByPath(path)).setOffset(offset);
+      ((IMeasurementMNode) mtree.getNodeByPath(path)).setOffset(offset);
     } finally {
       lock.writeLock().unlock();
     }
   }
 
-  @Override
-  public void changeAlias(String path, String alias) throws MetadataException {
+  private void changeAlias(String path, String alias) throws MetadataException {
     lock.writeLock().lock();
     try {
       MeasurementMNode leafMNode = (MeasurementMNode) mtree.getNodeByPath(path);
@@ -1284,7 +1286,7 @@ public class MManager implements ISchemaManager {
       Map<String, String> attributesMap, String fullPath) throws MetadataException, IOException {
     lock.writeLock().lock();
     try {
-      MNode mNode = mtree.getNodeByPath(fullPath);
+      ISchemaNode mNode = mtree.getNodeByPath(fullPath);
       if (!(mNode instanceof MeasurementMNode)) {
         throw new PathNotExistException(fullPath);
       }
@@ -1388,11 +1390,11 @@ public class MManager implements ISchemaManager {
       throws MetadataException, IOException {
     lock.writeLock().lock();
     try {
-      MNode mNode = mtree.getNodeByPath(fullPath);
+      ISchemaNode mNode = mtree.getNodeByPath(fullPath);
       if (!(mNode instanceof MeasurementMNode)) {
         throw new PathNotExistException(fullPath);
       }
-      MeasurementMNode leafMNode = (MeasurementMNode) mNode;
+      IMeasurementMNode leafMNode = (IMeasurementMNode) mNode;
       // no tag or attribute, we need to add a new record in log
       if (leafMNode.getOffset() < 0) {
         long offset = tagLogFile.write(Collections.emptyMap(), attributesMap);
@@ -1432,11 +1434,11 @@ public class MManager implements ISchemaManager {
       throws MetadataException, IOException {
     lock.writeLock().lock();
     try {
-      MNode mNode = mtree.getNodeByPath(fullPath);
+      ISchemaNode mNode = mtree.getNodeByPath(fullPath);
       if (!(mNode instanceof MeasurementMNode)) {
         throw new PathNotExistException(fullPath);
       }
-      MeasurementMNode leafMNode = (MeasurementMNode) mNode;
+      IMeasurementMNode leafMNode = (IMeasurementMNode) mNode;
       // no tag or attribute, we need to add a new record in log
       if (leafMNode.getOffset() < 0) {
         long offset = tagLogFile.write(tagsMap, Collections.emptyMap());
@@ -1486,11 +1488,11 @@ public class MManager implements ISchemaManager {
       throws MetadataException, IOException {
     lock.writeLock().lock();
     try {
-      MNode mNode = mtree.getNodeByPath(fullPath);
+      ISchemaNode mNode = mtree.getNodeByPath(fullPath);
       if (!(mNode instanceof MeasurementMNode)) {
         throw new PathNotExistException(fullPath);
       }
-      MeasurementMNode leafMNode = (MeasurementMNode) mNode;
+      IMeasurementMNode leafMNode = (IMeasurementMNode) mNode;
       // no tag or attribute, just do nothing.
       if (leafMNode.getOffset() < 0) {
         return;
@@ -1558,11 +1560,11 @@ public class MManager implements ISchemaManager {
       throws MetadataException, IOException {
     lock.writeLock().lock();
     try {
-      MNode mNode = mtree.getNodeByPath(fullPath);
+      ISchemaNode mNode = mtree.getNodeByPath(fullPath);
       if (!(mNode instanceof MeasurementMNode)) {
         throw new PathNotExistException(fullPath);
       }
-      MeasurementMNode leafMNode = (MeasurementMNode) mNode;
+      IMeasurementMNode leafMNode = (IMeasurementMNode) mNode;
       if (leafMNode.getOffset() < 0) {
         throw new MetadataException(
             String.format("TimeSeries [%s] does not have any tag/attribute.", fullPath));
@@ -1638,11 +1640,11 @@ public class MManager implements ISchemaManager {
       throws MetadataException, IOException {
     lock.writeLock().lock();
     try {
-      MNode mNode = mtree.getNodeByPath(fullPath);
+      ISchemaNode mNode = mtree.getNodeByPath(fullPath);
       if (!(mNode instanceof MeasurementMNode)) {
         throw new PathNotExistException(fullPath);
       }
-      MeasurementMNode leafMNode = (MeasurementMNode) mNode;
+      IMeasurementMNode leafMNode = (IMeasurementMNode) mNode;
       if (leafMNode.getOffset() < 0) {
         throw new MetadataException(
             String.format("TimeSeries [%s] does not have [%s] tag/attribute.", fullPath, oldKey));
@@ -1731,14 +1733,14 @@ public class MManager implements ISchemaManager {
   }
 
   @Override
-  public void collectTimeseriesSchema(MNode startingNode,
+  public void collectTimeseriesSchema(ISchemaNode startingNode,
       Collection<TimeseriesSchema> timeseriesSchemas) {
-    Deque<MNode> nodeDeque = new ArrayDeque<>();
+    Deque<ISchemaNode> nodeDeque = new ArrayDeque<>();
     nodeDeque.addLast(startingNode);
     while (!nodeDeque.isEmpty()) {
-      MNode node = nodeDeque.removeFirst();
+      ISchemaNode node = nodeDeque.removeFirst();
       if (node instanceof MeasurementMNode) {
-        MeasurementSchema nodeSchema = ((MeasurementMNode) node).getSchema();
+        MeasurementSchema nodeSchema = ((IMeasurementMNode) node).getSchema();
         timeseriesSchemas.add(new TimeseriesSchema(node.getFullPath(), nodeSchema.getType(),
             nodeSchema.getEncodingType(), nodeSchema.getCompressor()));
       } else if (!node.getChildren().isEmpty()) {
@@ -1748,14 +1750,14 @@ public class MManager implements ISchemaManager {
   }
 
   @Override
-  public void collectMeasurementSchema(MNode startingNode,
+  public void collectMeasurementSchema(ISchemaNode startingNode,
       Collection<MeasurementSchema> timeseriesSchemas) {
-    Deque<MNode> nodeDeque = new ArrayDeque<>();
+    Deque<ISchemaNode> nodeDeque = new ArrayDeque<>();
     nodeDeque.addLast(startingNode);
     while (!nodeDeque.isEmpty()) {
-      MNode node = nodeDeque.removeFirst();
+      ISchemaNode node = nodeDeque.removeFirst();
       if (node instanceof MeasurementMNode) {
-        MeasurementSchema nodeSchema = ((MeasurementMNode) node).getSchema();
+        MeasurementSchema nodeSchema = ((IMeasurementMNode) node).getSchema();
         timeseriesSchemas.add(new MeasurementSchema(node.getFullPath(), nodeSchema.getType(),
             nodeSchema.getEncodingType(), nodeSchema.getCompressor()));
       } else if (!node.getChildren().isEmpty()) {
@@ -1772,7 +1774,7 @@ public class MManager implements ISchemaManager {
    */
   @Override
   public void collectSeries(String startingPath, List<MeasurementSchema> measurementSchemas) {
-    MNode mNode;
+    ISchemaNode mNode;
     try {
       mNode = getNodeByPath(startingPath);
     } catch (MetadataException e) {
@@ -1837,12 +1839,12 @@ public class MManager implements ISchemaManager {
   @Override
   public void updateLastCache(String seriesPath, TimeValuePair timeValuePair,
       boolean highPriorityUpdate, Long latestFlushedTime,
-      MeasurementMNode node) {
+      IMeasurementMNode node) {
     if (node != null) {
       node.updateCachedLast(timeValuePair, highPriorityUpdate, latestFlushedTime);
     } else {
       try {
-        MeasurementMNode node1 = (MeasurementMNode) mtree.getNodeByPath(seriesPath);
+        IMeasurementMNode node1 = (IMeasurementMNode) mtree.getNodeByPath(seriesPath);
         node1.updateCachedLast(timeValuePair, highPriorityUpdate, latestFlushedTime);
       } catch (MetadataException e) {
         logger.warn("failed to update last cache for the {}, err:{}", seriesPath, e.getMessage());
@@ -1853,7 +1855,7 @@ public class MManager implements ISchemaManager {
   @Override
   public TimeValuePair getLastCache(String seriesPath) {
     try {
-      MeasurementMNode node = (MeasurementMNode) mtree.getNodeByPath(seriesPath);
+      IMeasurementMNode node = (IMeasurementMNode) mtree.getNodeByPath(seriesPath);
       return node.getCachedLast();
     } catch (MetadataException e) {
       logger.warn("failed to get last cache for the {}, err:{}", seriesPath, e.getMessage());
@@ -1924,7 +1926,7 @@ public class MManager implements ISchemaManager {
       String[] measurementList, InsertPlan plan) throws MetadataException {
     MeasurementSchema[] schemas = new MeasurementSchema[measurementList.length];
 
-    MNode deviceNode;
+    ISchemaNode deviceNode;
     // 1. get device node
     deviceNode = getDeviceNodeWithAutoCreateAndReadLock(deviceId);
 
@@ -1952,7 +1954,7 @@ public class MManager implements ISchemaManager {
               Collections.emptyMap());
         }
 
-        MeasurementMNode measurementNode = (MeasurementMNode) getChild(deviceNode,
+        IMeasurementMNode measurementNode = (IMeasurementMNode) getChild(deviceNode,
             measurementList[i]);
 
         // check type is match
@@ -2056,7 +2058,7 @@ public class MManager implements ISchemaManager {
   @Override
   public void unlockDeviceReadLock(String deviceId) {
     try {
-      MNode mNode = getDeviceNode(deviceId);
+      ISchemaNode mNode = getDeviceNode(deviceId);
       mNode.readUnlock();
     } catch (MetadataException e) {
       // ignore the exception

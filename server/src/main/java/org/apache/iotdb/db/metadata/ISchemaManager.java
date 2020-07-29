@@ -26,10 +26,9 @@ import java.util.Set;
 import org.apache.iotdb.db.exception.metadata.IllegalPathException;
 import org.apache.iotdb.db.exception.metadata.MetadataException;
 import org.apache.iotdb.db.exception.metadata.StorageGroupNotSetException;
-import org.apache.iotdb.db.metadata.MManager.StorageGroupFilter;
-import org.apache.iotdb.db.metadata.mnode.MNode;
-import org.apache.iotdb.db.metadata.mnode.MeasurementMNode;
-import org.apache.iotdb.db.metadata.mnode.StorageGroupMNode;
+import org.apache.iotdb.db.metadata.mnode.IMeasurementMNode;
+import org.apache.iotdb.db.metadata.mnode.ISchemaNode;
+import org.apache.iotdb.db.metadata.mnode.IStorageGroupMNode;
 import org.apache.iotdb.db.qp.physical.crud.InsertPlan;
 import org.apache.iotdb.db.qp.physical.sys.CreateTimeSeriesPlan;
 import org.apache.iotdb.db.qp.physical.sys.ShowTimeSeriesPlan;
@@ -163,7 +162,7 @@ public interface ISchemaManager {
    *
    * @return all storage group nodes in the system
    */
-  List<StorageGroupMNode> getAllStorageGroupNodes();
+  List<IStorageGroupMNode> getAllStorageGroupNodes();
 
   /**
    * get all full paths which match the given prefix Path.
@@ -212,73 +211,266 @@ public interface ISchemaManager {
   MeasurementSchema getSeriesSchema(String device, String measurement)
           throws MetadataException;
 
+  /**
+   * get the direct child nodes of the given path.
+   * @param path a prefix of a path, starts with root, can contain *.
+   * @return the full paths of the child nodes
+   * @throws MetadataException
+   */
   Set<String> getChildNodePathInNextLevel(String path) throws MetadataException;
 
+  /**
+   * Whether a (prefix) path exist. The path does not contain *.
+   * @param path
+   * @return
+   */
   boolean isPathExist(String path);
 
-  MNode getNodeByPath(String path) throws MetadataException;
+  /**
+   * convert the given path to a schemaNode structure
+   * @param path a path which has no *.
+   * @return
+   * @throws MetadataException
+   */
+  ISchemaNode getNodeByPath(String path) throws MetadataException;
 
-  StorageGroupMNode getStorageGroupNode(String path) throws MetadataException;
+  /**
+   * check whether the path is a registered Storage group.
+   * If so, convert it to IStorageGroupMNode structure.
+   * Otherwise, throw StorageGroupNotFound Exception
+   * @param path
+   * @return
+   * @throws MetadataException
+   */
+  IStorageGroupMNode getStorageGroupNode(String path) throws MetadataException;
 
-  MNode getDeviceNodeWithAutoCreateAndReadLock(
+  /**
+   * get the device node structure, and apply the read lock of the node.
+   * If the node does not exist, and autoCreateSchema==true, then create it (and its parents)
+   * @param path a path which represents a device.
+   * @param autoCreateSchema whether register the device into IoTDB instance.
+   * @param sgLevel which level of the path will be considered as the storage group.
+   * @return the Node that represents to the device. (node.children() will be measurements)
+   * @throws MetadataException
+   */
+  ISchemaNode getDeviceNodeWithAutoCreateAndReadLock(
       String path, boolean autoCreateSchema, int sgLevel) throws MetadataException;
 
-  MNode getDeviceNodeWithAutoCreateAndReadLock(String path) throws MetadataException;
+  /**
+   * get the device node structure, and apply the read lock of the node.
+   * If the node does not exist, and IoTDB allows auto create schema, then create it (and its parents)
+   * @param path  a path which represents a device.
+   * @return the Node that represents to the device. (node.children() will be measurements)
+   * @throws MetadataException
+   */
+  ISchemaNode getDeviceNodeWithAutoCreateAndReadLock(String path) throws MetadataException;
 
-  MNode getDeviceNode(String path) throws MetadataException;
+  /**
+   * get the device node structure
+   * @param path  a path which represents a device.
+   * @return
+   * @throws MetadataException PathNotExistException or StorageGroupNotSetException
+   */
+  ISchemaNode getDeviceNode(String path) throws MetadataException;
 
+  /**
+   * given a path, find the same string in memory to reduce the memory cost.
+   * @param path a path which represents a device.
+   * @return
+   */
   String getDeviceId(String path);
 
-  MNode getChild(MNode parent, String child);
+  /**
+   * find the child of a given node.
+   * @param parent
+   * @param child
+   * @return the child node structure or null if not found
+   */
+  ISchemaNode getChild(ISchemaNode parent, String child);
 
+  /**
+   * convert the whole schema into json format (except the first two lines).
+   * e.g.,
+   * <pre>
+   * ===  Timeseries Tree  ===
+   *
+   * {
+   * 	"root":{
+   * 		"ln":{
+   * 			"wf01":{
+   * 				"wt01":{
+   * 					"status":{
+   * 						"args":"{}",
+   * 						"StorageGroup":"root.ln",
+   * 						"DataType":"BOOLEAN",
+   * 						"Compressor":"UNCOMPRESSED",
+   * 						"Encoding":"PLAIN"
+   *          }
+   *        }
+   * 			}
+   * 		}
+   * 	}
+   * }
+   * </pre>
+   * @return
+   */
   String getMetadataInString();
 
   @TestOnly
+  /**
+   * just for test.
+   * set the maximal number of time series among all storage groups.
+   */
   void setMaxSeriesNumberAmongStorageGroup(long maxSeriesNumberAmongStorageGroup);
 
+  /**
+   * find the maximal number of time series among all storage groups.
+   * e.g., sg1 has 5 series, and sg2 has 10 series, and then the result is 10.
+   * @return
+   */
   long getMaximalSeriesNumberAmongStorageGroups();
 
+  /**
+   * set the data time-to-live under a given storage group.
+   * The data will be (lazy) removed after IoTDB instance's system time > dataTTL + data's timestamp
+   * @param storageGroup
+   * @param dataTTL unit: ms.
+   * @throws MetadataException
+   * @throws IOException
+   */
   void setTTL(String storageGroup, long dataTTL) throws MetadataException, IOException;
 
+  /**
+   * get the TTLs of all storage groups
+   * @return
+   */
   Map<String, Long> getStorageGroupsTTL();
 
-  void changeOffset(String path, long offset) throws MetadataException;
-
-  void changeAlias(String path, String alias) throws MetadataException;
-
+  /**
+   * update or insert new alias, tags, and attributes to a given time series
+   * @param alias can be null if you do not want to update/insert the alias
+   * @param tagsMap can be null if you do not want to update/insert the tags
+   * @param attributesMap can be null if you do not want to update/insert the attributes
+   * @param fullPath full path of a time series
+   * @throws MetadataException
+   * @throws IOException
+   */
   void upsertTagsAndAttributes(String alias, Map<String, String> tagsMap,
       Map<String, String> attributesMap, String fullPath) throws MetadataException, IOException;
 
+  /**
+   * add a set of attribute keys and attribute values to a given series.
+   * Attributes does not allow query by attribute value
+   * @param attributesMap
+   * @param fullPath full path of a time series
+   * @throws MetadataException
+   * @throws IOException
+   */
   void addAttributes(Map<String, String> attributesMap, String fullPath)
           throws MetadataException, IOException;
 
+  /**
+   * add a set of tag keys and tag values to a given series.
+   * @param tagsMap
+   * @param fullPath full path of a time series
+   * @throws MetadataException
+   * @throws IOException
+   */
   void addTags(Map<String, String> tagsMap, String fullPath)
               throws MetadataException, IOException;
 
+  /**
+   * remote the given keys from a time series's tags or attributes
+   * @param keySet
+   * @param fullPath
+   * @throws MetadataException
+   * @throws IOException
+   */
   void dropTagsOrAttributes(Set<String> keySet, String fullPath)
                   throws MetadataException, IOException;
 
+  /**
+   * add or change the values of tags or attributes
+   *
+   * For each key, if the key is an existing tag key, then update its value.
+   * If the key is not an existing tag key, then either update the key's value in attributes
+   * or save it as an attribute key.
+   *
+   * @param alterMap the updated tags or new/updated attributes key-value
+   * @param fullPath timeseries
+   */
   void setTagsOrAttributesValue(Map<String, String> alterMap, String fullPath)
                       throws MetadataException, IOException;
-
+  /**
+   * rename the tag or attribute's key of the timeseries
+   *
+   * @param oldKey   old key of tag or attribute
+   * @param newKey   new key of tag or attribute
+   * @param fullPath timeseries
+   */
   void renameTagOrAttributeKey(String oldKey, String newKey, String fullPath)
                           throws MetadataException, IOException;
 
-  void collectTimeseriesSchema(MNode startingNode,
+  /**
+   * collect all timeseries that have the given prefix path of the startingNode
+   * @param startingNode
+   * @param timeseriesSchemas
+   */
+  void collectTimeseriesSchema(ISchemaNode startingNode,
       Collection<TimeseriesSchema> timeseriesSchemas);
 
-  void collectMeasurementSchema(MNode startingNode,
+  /**
+   * collect all timeseries that have the given prefix path of the startingNode
+   * @param startingNode
+   * @param timeseriesSchemas
+   */
+  void collectMeasurementSchema(ISchemaNode startingNode,
       Collection<MeasurementSchema> timeseriesSchemas);
 
+  /**
+   * the same to collectMeasurementSchema(ISchemaNode startingNode,
+   *       Collection<MeasurementSchema> timeseriesSchemas)
+   * @param startingPath
+   * @param measurementSchemas
+   */
   void collectSeries(String startingPath, List<MeasurementSchema> measurementSchemas);
 
+  /**
+   * For a path, infer all storage groups it may belong to.
+   *
+   * The input path can have *. Therefore, there may be more than one storage groups match the prefix
+   * of the path.
+   *
+   * given a path, find all storage groups that can match the prefix of the path.
+   * For each storage group, use the storage group to replace the prefix of the path if the prefix contains *.
+   * Collect all storage groups as keys and the replaced paths as values.
+   *
+   * Notice:
+   *
+   * If the * is not at the tail of the path, then only one level will be inferred by the *.
+   * If the wildcard is at the tail, then the inference will go on until the storage groups are found
+   * and the wildcard will be kept.
+   *
+   * <p>
+   *   Assuming we have three SGs: root.group1, root.group2, root.area1.group3
+   *   <br/>Eg1: for input "root.*",
+   *   returns ("root.group1", "root.group1.*"), ("root.group2", "root.group2.*")
+   * ("root.area1.group3", "root.area1.group3.*")
+   * <br/> Eg2: for input "root.*.s1.*.b",
+   * returns ("root.group1", "root.group1.s1.*.b"), ("root.group2", "root.group2.s1.*.b")
+   *
+   * <p>Eg3: for input "root.area1.*", returns ("root.area1.group3", "root.area1.group3.*")
+   *
+   * @param path can be a prefix or a full path. can has *.
+   * @return StorageGroupName-FullPath pairs
+   */
   Map<String, String> determineStorageGroup(String path) throws IllegalPathException;
 
   void cacheMeta(String path, MeasurementMeta meta);
 
   void updateLastCache(String seriesPath, TimeValuePair timeValuePair,
       boolean highPriorityUpdate, Long latestFlushedTime,
-      MeasurementMNode node);
+      IMeasurementMNode node);
 
   TimeValuePair getLastCache(String seriesPath);
 

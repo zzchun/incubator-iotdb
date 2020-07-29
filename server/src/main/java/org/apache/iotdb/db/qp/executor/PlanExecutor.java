@@ -74,7 +74,8 @@ import org.apache.iotdb.db.exception.metadata.MetadataException;
 import org.apache.iotdb.db.exception.metadata.StorageGroupNotSetException;
 import org.apache.iotdb.db.exception.query.QueryProcessException;
 import org.apache.iotdb.db.metadata.ISchemaManager;
-import org.apache.iotdb.db.metadata.mnode.MNode;
+import org.apache.iotdb.db.metadata.mnode.ISchemaNode;
+import org.apache.iotdb.db.metadata.mnode.IStorageGroupMNode;
 import org.apache.iotdb.db.metadata.mnode.MeasurementMNode;
 import org.apache.iotdb.db.metadata.mnode.StorageGroupMNode;
 import org.apache.iotdb.db.qp.logical.Operator.OperatorType;
@@ -519,7 +520,7 @@ public class PlanExecutor implements IPlanExecutor {
     return IoTDB.metaManager.showTimeseries(plan, context);
   }
 
-  protected List<StorageGroupMNode> getAllStorageGroupNodes() {
+  protected List<IStorageGroupMNode> getAllStorageGroupNodes() {
     return IoTDB.metaManager.getAllStorageGroupNodes();
   }
 
@@ -530,9 +531,9 @@ public class PlanExecutor implements IPlanExecutor {
             Arrays.asList(TSDataType.TEXT, TSDataType.INT64));
     List<String> selectedSgs = showTTLPlan.getStorageGroups();
 
-    List<StorageGroupMNode> storageGroups = getAllStorageGroupNodes();
+    List<IStorageGroupMNode> storageGroups = getAllStorageGroupNodes();
     int timestamp = 0;
-    for (StorageGroupMNode mNode : storageGroups) {
+    for (IStorageGroupMNode mNode : storageGroups) {
       String sgName = mNode.getFullPath();
       if (!selectedSgs.isEmpty() && !selectedSgs.contains(sgName)) {
         continue;
@@ -752,7 +753,7 @@ public class PlanExecutor implements IPlanExecutor {
     Set<Path> registeredSeries = new HashSet<>();
     for (ChunkGroupMetadata chunkGroupMetadata : chunkGroupMetadataList) {
       String device = chunkGroupMetadata.getDevice();
-      MNode node = null;
+      ISchemaNode node = null;
       try {
         node = ISchemaManager.getDeviceNodeWithAutoCreateAndReadLock(device, true, sgLevel);
         for (ChunkMetadata chunkMetadata : chunkGroupMetadata.getChunkMetadataList()) {

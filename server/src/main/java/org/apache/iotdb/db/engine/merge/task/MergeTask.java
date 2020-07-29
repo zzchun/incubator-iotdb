@@ -24,8 +24,8 @@ import org.apache.iotdb.db.engine.merge.manage.MergeResource;
 import org.apache.iotdb.db.engine.merge.recover.MergeLogger;
 import org.apache.iotdb.db.engine.storagegroup.TsFileResource;
 import org.apache.iotdb.db.exception.metadata.MetadataException;
-import org.apache.iotdb.db.metadata.mnode.MNode;
-import org.apache.iotdb.db.metadata.mnode.MeasurementMNode;
+import org.apache.iotdb.db.metadata.mnode.IMeasurementMNode;
+import org.apache.iotdb.db.metadata.mnode.ISchemaNode;
 import org.apache.iotdb.db.service.IoTDB;
 import org.apache.iotdb.db.utils.MergeUtils;
 import org.apache.iotdb.tsfile.read.common.Path;
@@ -126,10 +126,10 @@ public class MergeTask implements Callable<Void> {
     Map<Path, MeasurementSchema> measurementSchemaMap = new HashMap<>();
     List<Path> unmergedSeries = new ArrayList<>();
     for (String device : devices) {
-      MNode deviceNode = IoTDB.metaManager.getNodeByPath(device);
-      for (Entry<String, MNode> entry : deviceNode.getChildren().entrySet()) {
+      ISchemaNode deviceNode = IoTDB.metaManager.getNodeByPath(device);
+      for (Entry<String, ISchemaNode> entry : deviceNode.getChildren().entrySet()) {
         Path path = new Path(device, entry.getKey());
-        measurementSchemaMap.put(path, ((MeasurementMNode) entry.getValue()).getSchema());
+        measurementSchemaMap.put(path, ((IMeasurementMNode) entry.getValue()).getSchema());
         unmergedSeries.add(path);
       }
     }
